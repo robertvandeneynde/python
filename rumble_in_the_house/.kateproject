@@ -1,0 +1,10 @@
+{
+    "name": "rumble_in_the_house",
+    "files": [
+        {
+            "directory": ".",
+            "filters": ["*.py", "*.img"],
+            "recursive": 1
+        }
+    ]
+}

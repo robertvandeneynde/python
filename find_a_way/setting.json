@@ -1,0 +1,67 @@
+{
+    "pieces":{
+        "mini_rook":{
+            "heuristic":"manhattan",
+            "directions":"rook",
+            "range":1
+        },
+        "king":{
+            "heuristic":"king",
+            "directions":"queen",
+            "range":1
+        },
+        "knight":{
+            "heuristic":"knight",
+            "directions":[
+                [ 2, 1],
+                [ 2,-1],
+                [-2, 1],
+                [-2,-1],
+                [ 1, 2],
+                [ 1,-2],
+                [-1, 2],
+                [-1,-2]
+            ],
+            "range":1
+        },
+        "mini_bishop":{
+            "heuristic":"king",
+            "directions":"bishop",
+            "range":1
+        },
+        "rook":{
+            "heuristic":"rook",
+            "directions":[
+                [ 0, 1],
+                [ 0,-1],
+                [ 1, 0],
+                [-1, 0]
+            ],
+            "range":"+"
+        },
+        "queen":{
+            "heuristic":"queen",
+            "directions":[
+                "rook",
+                "bishop"
+            ],
+            "range":"+"
+        },
+        "bishop":{
+            "heuristic":"bishop",
+            "directions":[
+                [ 1, 1],
+                [ 1,-1],
+                [-1,-1],
+                [-1, 1]
+            ],
+            "range":"+"
+        }
+    },
+    "order":[
+        "mini_rook","king",
+        "knight","mini_bishop",
+        "rook","queen",
+        "bishop"
+    ]
+}

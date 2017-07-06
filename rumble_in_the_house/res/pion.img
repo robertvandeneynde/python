@@ -1,0 +1,16 @@
+{
+    "displays":{
+        "normal":"pion_normal.png",
+        "rollover":"pion_rollover.png"
+    },
+    "collisions":{
+        "normal":{
+            "type":"pixelmap",
+            "source":"pion_pix.png",
+            "aliases":["normal"]
+        }
+    },
+    "displaycollision":[
+        [".*","normal"]
+    ]
+}

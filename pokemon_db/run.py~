@@ -1,0 +1,90 @@
+import sqlite3
+
+def run(file='veekun-pokedex.sqlite'):
+    c = sqlite3.connect(file)
+    
+    def nouvelle_entree():
+        return {
+                'nom':'?',
+                'stats':[-1] * 6,
+                'types':[None] * 2,
+                'attaques_niveau':{}, #Map level => move_id
+                'evolutions_niveau':{}, #Map level => pokemon_id
+        }
+        
+    infos = []
+    def info(num):
+        while len(infos) < num-1:
+            infos.append( nouvelle_entree() )
+        return infos[num-1]
+    
+    TYPE_NAMES = dict(c.execute(
+        '''SELECT type_id,name
+        FROM type_names
+        WHERE local_language_id=5'''
+    ))
+    
+    STAT_NAMES = dict(c.execute(
+        '''SELECT stat_id,name
+        FROM stat_names
+        WHERE local_language_id=5'''
+    ))
+    
+    VERSION_GROUPS = list(c.execute('''SELECT id
+        FROM version_groups
+        WHERE generation_id<=3'''))
+    
+    for num,nom in c.execute(
+        '''SELECT pokemon_species_id,name
+            FROM pokemon_species_names
+            WHERE local_language_id=5
+            ORDER BY pokemon_species_id'''):
+        
+        myinfo = info(num)
+        myinfo['nom'] = nom
+        
+        for stat_id,base_stat in c.execute(
+            '''SELECT stat_id,base_stat
+                FROM pokemon_stats
+                WHERE pokemon_id=?''', num):
+            try:
+                myinfo[stat_id-1] = base_stat
+            except IndexError:
+                pass
+        
+        for type_id,slot in c.execute('''SELECT type_id,slot
+                FROM pokemon_types
+                WHERE pokemon_id=?''', num):
+            try:
+                myinfo['types'][slot-1] = type_id
+            except IndexError:
+                pass
+                
+        for level,move_id,version_group_id in c.execute('''
+                SELECT level,move_id
+                FROM pokemon_moves
+                WHERE pokemon_id=? AND pokemon_move_method_id=1''', num):
+            if version_group_id in VERSION_GROUPS:
+                myinfo['attaques_niveau'][level] = move_id
+        
+    # ne pas limiter le generation_id
+    # capture_rate est intéressant
+    # growth_rate_id
+    # id = 2 => evolves_from_species_id = 1
+    for base_id,evolution_id in c.execute('''
+        SELECT evolves_from_species_id,id
+        FROM pokemon_species
+        '''):
+        info(base_id)['evolutions_niveau'][level] = evolution_id
+    
+    #evolved_species_id = 2, evolution_trigger_id=1, minimum_level=16
+    for level,evolution_id in c.execute('''
+            SELECT minimum_level,evolved_species_id
+            FROM pokemon_evolution
+            WHERE evolution_trigger_id=1'''):
+        base_id, = c.execute('''
+            SELECT evolves_from_species_id
+            FROM pokemon_species
+            WHERE id=?''', evolution_id)
+        info(base_id)['evolutions_niveau'][level] = evolution_id
+    

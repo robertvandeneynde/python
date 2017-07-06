@@ -1,0 +1,20 @@
+{
+    "displays":{
+        "normal":"salle_normal.png",
+        "rollover":"salle_rollover.png"
+    },
+    "collisions":{
+        "normal":{
+            "type":"pixelmap",
+            "source":"salle_pix.png",
+            "aliases":["grab","connect","normal"],
+            "groups":{
+                "connect": "connect*",
+                "grab": "grab*"
+            }
+        }
+    },
+    "displaycollision":[
+        [".*","normal"]
+    ]
+}

@@ -1,0 +1,50 @@
+
+# Sac : 1 1 0 0 + 4 moines #
+
+4 lignes
+3.0 cm
+
+# Sac : 2 1 0 0 + 4 moines #
+
+6 lignes
+7.0 cm
+
+# Sac : 3 1 0 0 + 4 moines #
+
+8 lignes
+12.0 cm
+
+# Sac : 2 2 0 0 + 4 moines #
+
+9 lignes
+17.5 cm
+
+# Sac : 4 1 0 0 + 4 moines #
+
+9 lignes
+23.0 cm
+
+# Sac : 3 2 0 0 + 4 moines #
+
+11 lignes
+29.5 cm
+
+# Sac : 4 2 0 0 + 4 moines #
+
+12 lignes
+36.5 cm
+
+# Sac : 3 3 0 0 + 4 moines #
+
+13 lignes
+44.0 cm
+
+# Sac : 4 3 0 0 + 4 moines #
+
+14 lignes
+52.0 cm
+
+# Sac : 4 4 0 0 + 4 moines #
+
+15 lignes
+60.5 cm
