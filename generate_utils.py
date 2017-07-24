@@ -25,6 +25,7 @@ class OutFile:
     def __enter__(self):
         self.unlock()
         self.f = open(self.filename, ''.join({'w'} | set(self.supargs)))
+        self.f.__enter__()
         return self.f
     
     def __exit__(self, type, value, traceback):

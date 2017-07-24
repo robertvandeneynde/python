@@ -34,7 +34,7 @@ p.add_argument('--po-empty', action='store_true')
 
 # fillgap 
 p.add_argument('--ms', type=int, default=400, help='gaps lengthy of less than --ms millisecond will be filled')
-p.add_argument('--filler', default='next', choices='next prev middle'.split(), help='next sub will be sooner, or prev text will be sooner, or middle, both will move')
+p.add_argument('--filler', default='prev', choices='next prev middle'.split(), help='next sub will begin sooner, or prev text will last longer, or middle, both will be longer')
 
 args = p.parse_args()
 action = args.action

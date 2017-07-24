@@ -1,5 +1,30 @@
 import random
 
+# quick functions
+
+def revmove(b):
+    """
+    R' : R
+    R2 : R2
+    R2' : R2'
+    R : R'
+    """
+    return b if "2" in b else b[0] if "'" in b else b[0] + "'"
+
+def split(string):
+    """
+    R'U2LU2' : ["R'", "U2", "L'", "U2'"]
+    """
+    return re.compile("[RLUDFB][2']{0,2}").findall(string)
+
+def rev(string):
+    """
+    R'U2LU2' : U2'L'U2R'
+    """
+    return ''.join(reversed(list(map(revblock, split(string)))))
+
+# model
+
 class Carre:
     def __init__(self, couleur, position, face):
         self.couleur = couleur
