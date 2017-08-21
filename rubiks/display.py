@@ -312,8 +312,7 @@ class Rubik:
         self.maxValue = self.width / 2.0
         pos1D = [self.maxValue - 0.5 - i for i in range(self.width)] # [1, 0, -1]
         self.cubes = [Cub(pos) for pos in itertools.product(pos1D, repeat=self.dimensions)] # 3 ** 3
-
-
+    
 def creer_vao_rubiks(shader):
     rubik = Rubik()
     
@@ -377,8 +376,6 @@ def creer_vao_rubiks(shader):
     all_positions = array(all_positions, dtype=numpy.float32).flatten()
     all_normals = [quad.normal for cub in rubik.cubes for quad in cub.quads for point in quad.points]
     all_normals = array(all_normals, dtype=numpy.float32).flatten()
-    
-    print('norm', all_normals2 == all_normals)
     
     i = 0
     for cub in rubik.cubes:
@@ -465,6 +462,39 @@ class Modifier:
         for cub in rubik.cubes:
             if i <= abs(cub.matrix[d][3] - raxe[d]) <= j:
                 yield cub
+
+class Move:
+    def __init__(self, selector, axe, direction:[-1,1], **kwargs):
+        self.selector = selector
+        self.axe = axe
+        self.direction = direction
+        self.kwargs = kwargs
+        self.matrix = GenericRotationMatrix(self.direction * 90, self.axe)
+    
+    def select(self, rubik):
+        yield from self.selector(self.axe, rubik=rubik, **self.kwargs)
+    
+    def __call__(self, rubik):
+        for cub in self.select(rubik):
+            cub.matrix = self.matrix @ cub.matrix
+    
+Unit = [array((1,0,0)), array((0,1,0)), array((0,0,1))]
+Moves = {}
+for i, (a, b) in enumerate(("RL", "UD", "FB")):
+    Moves[a] = Move(Modifier.cub_of_axe, Unit[i], -1)
+    Moves[b] = Move(Modifier.cub_of_axe, -Unit[i], +1)
+
+for k,move in list(Moves.items()):
+    Moves[k.lower()] = Moves[k + "w"] = Move(Modifier.cub_of_wide, move.axe, move.direction)
+    
+for i, letter in enumerate("xyz"):
+    Moves[letter] = Move(Modifier.cub_of_rotation, Unit[i], -1)
+
+for i, a in enumerate("MSE"):
+    Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], -1, subset={1})
+
+for k,move in list(Moves.items()):
+    Moves[k + "'"] = Move(move.selector, move.axe, -move.direction)
                 
 def main():
     pygame.init()
@@ -478,7 +508,6 @@ def main():
         shaders.compileShader(vertex_shader, GL_VERTEX_SHADER),
         shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER))
 
-    global rubik
     vao_rubiks, rubik = creer_vao_rubiks(shader)
     t = 0
 
@@ -498,29 +527,29 @@ def main():
         randc = lambda *arguments: choice(arguments)
         
         if t % 60 == 0:
+            def random_interval():
+                i = randint(0,2)
+                j = randint(i, 2)
+                return [i,j]
             
-            M = [0,0,0]
-            M[randc(0,1,2)] = 1
-            A = randc(-1,1,2,-2)
-            # random_subset = {i for i in range(3) if randc(0,1)}
-            # F = partial(Modifier.cub_of_general_movement, M, {i for i in range(3) if randc(0,1)})
-            random_interval_i = randint(0,2)
-            random_interval_j = randint(random_interval_i, 2)
-            F = partial(Modifier.cub_of_general_close, M, [random_interval_i, random_interval_j])
+            move = Move(Modifier.cub_of_general_close,
+                interval = random_interval(),
+                direction = randc(-1,1,2,-2),
+                axe = Unit[randc(0,1,2)])
             
             prev_matrix = {}
-            for cub in F(rubik):
+            for cub in move.select(rubik):
                 prev_matrix[cub] = cub.matrix
                 
         elif 1 <= t % 60 < 59:
             r = (t % 60 - 1) / (59 - 1)
-            for cub in F(rubik):
-                cub.matrix = GenericRotationMatrix(r * A * 90, M) @ prev_matrix[cub]
+            for cub in move.select(rubik):
+                cub.matrix = GenericRotationMatrix(r * move.direction * 90, move.axe) @ prev_matrix[cub]
         
         elif t % 60 == 59:
-            for cub in F(rubik):
-                cub.matrix = GenericRotationMatrix(A * 90, M) @ prev_matrix[cub]
-            del prev_matrix, M, A, F, random_interval_i, random_interval_j
+            for cub in move.select(rubik):
+                cub.matrix = GenericRotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
+            del prev_matrix
                 
         t += 1
         
