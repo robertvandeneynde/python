@@ -2,7 +2,15 @@
 import unicodedata
 import sys
 
-_lmap = map if sys.version_info[0] < 3 else lambda *args: list(map(*args))
+_lmap = map if sys.version_info[0] < 3 else lambda *a, **b: list(map(*a, **b))
+
+COLOR_TERMINAL = True
+
+def greenize(s):
+    return "\033[32m{}\033[0m".format(s) if COLOR_TERMINAL else s
+
+def greenizebold(s):
+    return "\033[32;1m{}\033[0m".format(s) if COLOR_TERMINAL else s
 
 # decorator
 def _multiple_makes_lmap(f):
@@ -34,7 +42,9 @@ def uniline(s):
 
 @_multiple_makes_lmap
 def unicontext(s, width=5):
-    print('U+' + hex(ord(s))[2:].zfill(4).upper(), s, unicodedata.name(s))
+    try: name = unicodedata.name(s)
+    except: name = ''
+    print('U+' + hex(ord(s))[2:].zfill(4).upper(), s, name)
     b = ord(s) >> 4 << 4
     print('       ' + ' '.join(hex(i)[2:].upper() for i in range(16)))
     for n in (b + i * 16 for i in range(-width,+width+1)):

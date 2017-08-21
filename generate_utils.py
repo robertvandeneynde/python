@@ -14,9 +14,9 @@ class OutFile:
         self.supargs = supargs
     
     def unlock(self):
-        if is_user_writable(self.filename):
-            raise ValueError('{} exists and is writable'.format(self.filename))
         if os.path.isfile(self.filename):
+            if is_user_writable(self.filename):
+                raise ValueError('{} exists and is writable'.format(self.filename))
             os.chmod(self.filename, 0o644)
     
     def lock(self):
