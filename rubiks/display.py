@@ -625,7 +625,7 @@ class Move:
             cub.matrix = self.matrix @ cub.matrix
     
     def inv(self):
-        return Move(self.selector, self.axe, -self.direction, **kwargs)
+        return Move(self.selector, self.axe, -self.direction, **self.kwargs)
     
 Unit = [array((1,0,0)), array((0,1,0)), array((0,0,1))]
 Moves = {}
@@ -655,19 +655,36 @@ class alg:
     @staticmethod
     def parse(string):
         import re
-        return re.findall("[ORLFBUDrlfbudxyz]w?2?'?", string)
+        return re.findall("[ORLFBUDMSErlfbudxyz]w?2?'?", string)
     
     @staticmethod
     def inv(string):
         return ''.join(next(k for k,v in Moves.items() if v == Moves[m].opp)
                        for m in reversed(alg.parse(string)))
+    
     @staticmethod
     def close(A,B):
+        """ [A: B] """
         return A + B + alg.inv(A)
     
     @staticmethod
     def commute(A,B):
+        """ [A,B] """
         return A + B + alg.inv(A) + alg.inv(B)
+    
+    def anti(string):
+        SUB = {
+            "R": "L'",
+            "L": "R'",
+            "F": "F'",
+            "B": "B'",
+            "U": "U'",
+            "D": "D'",
+        }
+        for k, v in list(SUB.items()):
+            SUB[v] = k
+            
+        return ''.join(SUB[x] for x in alg.parse(string))
 
 def main():
     pygame.init()
@@ -688,15 +705,19 @@ def main():
     t = 0
     import itertools
     
-    Sexy = commute("R", "U") # R U R' U'
+    Sexy = "R U R' U'" # [R, U]
     Longerxy = "R U R' F"
-    MyAntiSune = "R U2 R' U' R U' R'" # close(R, close(U, commute(U, R')))
+    MyAntiSune = "R U2 R' U' R U' R'" # [R: [U: [U, R']]]
     MySune = "L' U2' L U L' U L"
     
     FrontNSexy = lambda i: "F" + Sexy * i + "F'"
+    DoubleFrontNSexy = lambda i: "f" + Sexy * i + "f'"
+    
+    Simple = FrontNSexy(1)
+    Double = DoubleFrontNSexy(1)
     
     chosen_move = alg.parse(
-        MyAntiSune + Sexy + "O"
+        Sexy
     )
     
     move_cycle = iter(chosen_move)
@@ -705,8 +726,9 @@ def main():
     fini = 0
     rcamx = rcamy = 0
     go = True
-    period = 2
+    period = 50
     stopAtO = False
+    RANDOM = 0 # 'subset'
     while fini == 0:
         # pour tous les événements qui se sont passsés depuis la dernière fois
         pressed = pygame.key.get_pressed()
@@ -754,23 +776,30 @@ def main():
                     return [i,j]
                 
                 try:
-                    move = Moves[next(move_cycle)]
-                    if (move.selector == Modifier.cub_of_general_movement and 
-                        len(move.kwargs['subset']) == 0): # Null move
-                        print('{0: 5}'.format(t // P), 'Solved' if rubik.solved() else ' ' * len('Solved'), rubik.identifyOLL())
-                        if stopAtO:
-                            go = False
+                    if RANDOM == 'close':
+                        move = Move(Modifier.cub_of_general_close,
+                            interval = random_interval(),
+                            direction = randc(-1,1,2,-2),
+                            axe = Unit[randc(0,1,2)])
+                        
+                    elif RANDOM == 'subset':
+                        move = Move(Modifier.cub_of_general_movement,
+                            subset = {i for i in range(3) if randc(0,1)},
+                            direction = randc(-1,1,2,-2),
+                            axe = Unit[randc(0,1,2)])
+                    else:
+                        move = Moves[next(move_cycle)]
+                        if (move.selector == Modifier.cub_of_general_movement and 
+                            len(move.kwargs['subset']) == 0): # Null move
+                            print('{0: 5}'.format(t // P), 'Solved' if rubik.solved() else ' ' * len('Solved'), rubik.identifyOLL())
+                            if stopAtO:
+                                go = False
                 
-                    # Move(Modifier.cub_of_general_close,
-                    #     interval = random_interval(),
-                    #     direction = randc(-1,1,2,-2),
-                    #     axe = Unit[randc(0,1,2)])
-                    
                     prev_matrix = {}
                     for cub in move.select(rubik):
                         prev_matrix[cub] = cub.matrix
                 except StopIteration:
-                    move = None
+                    go = False
                     
             elif move and 1 <= t % P < P-1:
                 r = (t % P - 1) / (P-1 - 1)
