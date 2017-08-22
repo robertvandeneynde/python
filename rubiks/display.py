@@ -10,10 +10,11 @@ from OpenGL.GL import shaders
 
 import ctypes
 import pygame
-from math import sin, cos, degrees, radians, tan
+from math import sin, cos, degrees, radians, tan, sqrt
 
 import numpy
 from numpy import array, linalg
+from numpy.linalg import norm
 
 vertex_shader = """
 #version 330
@@ -64,24 +65,43 @@ Axe.Z = 2
 def polar(*args):
     if len(args) == 2:
         r, t = args
+        return r * polar(t)
     elif len(args) == 1:
-        r, t = 1, args[0]
+        t, = args
+        return vec2(cos(t), sin(t))
     else:
         raise TypeError('Accept 1 or 2 arguments')
-
-    return r * vec2(cos(t), sin(t))
 
 
 def polard(*args):
     if len(args) == 2:
         r, t = args
+        return r * polard(t)
     elif len(args) == 1:
-        r, t = 1, args[0]
+        t, = args
+        return polar(radians(t))
     else:
         raise TypeError('Accept 1 or 2 arguments')
 
-    return r * polar(radians(t))
+def spherical(*args):
+    if len(args) == 3:
+        r, p, t = args
+        return r * spherical(p, t)
+    elif len(args) == 2:
+        p, t = args
+        return vec3(sin(p) * sin(t),
+                    sin(p) * cos(t),
+                    cos(p))
+    else:
+        raise TypeError("Accept 2 or 3 arguments")
 
+def sphericald(*args):
+    if len(args) == 3:
+        r, p, t = args
+        return r * sphericald(p, t)
+    elif len(args) == 2:
+        p, t = args
+        return spherical(radians(p), radians(t))
 
 def vec2(x, y):
     return array((x, y), dtype=numpy.float32)
@@ -270,12 +290,27 @@ def nouvel_ecran(W, H):
 class Point:
     pos = None
     
+    def __init__(self, other=None):
+        if other is not None:
+            self.pos = other.pos
+    
+    def copy(self):
+        return Point(self)
+    
 class Quad:
     color = None
+    colorid = None
     normal = None
     
-    def __init__(self):
+    def __init__(self, other=None):
         self.points = [Point() for p in range(4)]
+        
+        if other is not None:
+            for p1,p2 in zip(self.points, other.points):
+                p1.pos = p2.pos
+            self.color = other.color
+            self.colorid = other.colorid
+            self.normal = other.normal
     
     def __str__(self):
         return str(dict(
@@ -286,13 +321,25 @@ class Quad:
     def __repr__(self):
         return str(self)
     
+    def copy(self):
+        return Quad(self)
+    
 class Cub:
-    def  __init__(self, pos):
-        self.matrix = TranslationMatrix(pos)
-        self.pos = pos
-        self.quads = [Quad() for i in range(6)]
-        
-        self.span = range(0)
+    span = None
+    
+    def  __init__(self, pos_or_other):
+        if isinstance(pos_or_other, Cub):
+            other = pos_or_other
+            self.matrix = other.matrix
+            self.pos = other.pos
+            self.quads = [Quad(q) for q in other.quads]
+            self.span = other.span
+            
+        else:
+            pos = pos_or_other
+            self.matrix = TranslationMatrix(pos)
+            self.pos = pos
+            self.quads = [Quad() for i in range(6)]
     
     def __str__(self):
         return str(dict(
@@ -303,85 +350,184 @@ class Cub:
     
     def __repr__(self):
         return str(self)
+    
+    def copy(self):
+        return Cub(self)
+    
+    @property
+    def rotmatrix(self):
+        return array([self.matrix[i][:3] for i in range(3)])
+    
+    @property
+    def transvec(self):
+        return array([self.matrix[i][3] for i in range(3)])
+    
+    def colorAt(self, normal):
+        inner = self.rotmatrix
+        return next(quad.color for quad in self.quads if (inner @ quad.normal == normal).all())
+    
+    def colorIdAt(self, normal):
+        inner = self.rotmatrix
+        return next(quad.colorid for quad in self.quads if (inner @ quad.normal == normal).all())
 
 class Rubik:
-    def __init__(self):
+    def __init__(self, other=None):
         import itertools
-        self.width = 3
-        self.dimensions = 3
-        self.maxValue = self.width / 2.0
-        pos1D = [self.maxValue - 0.5 - i for i in range(self.width)] # [1, 0, -1]
-        self.cubes = [Cub(pos) for pos in itertools.product(pos1D, repeat=self.dimensions)] # 3 ** 3
+        
+        if other is not None:
+            self.width = other.width
+            self.dimensions = other.dimensions
+            self.maxValue = other.maxValue
+            self.cubes = [Cub(cub) for cub in other.cubes]
+        else:
+            self.width = 3
+            self.dimensions = 3
+            self.maxValue = self.width / 2.0
+            pos1D = [self.maxValue - 0.5 - i for i in range(self.width)] # [1, 0, -1]
+            self.cubes = [Cub(pos) for pos in itertools.product(pos1D, repeat=self.dimensions)] # 3 ** 3
+            
+            rubik = self
+        
+            def make(dim, rev):
+                V = [-0.5 if rev else 0.5] * 3
+                d1 = (dim + 1) % 3
+                d2 = (dim + 2) % 3
+                for i in range(4):
+                    yield list(V)
+                    V[d1], V[d2] = V[d2], -V[d1]
+            
+            quad_defs = [
+                list(make(i, False)) for i in range(3)
+            ] + [
+                list(reversed(list(make(i, True)))) for i in range(3)
+            ] # 6 quads of 4 points of 3 reals
+            
+            for cub in rubik.cubes:
+                for quad, quad_def in zip(cub.quads, quad_defs):
+                    for point, pos in zip(quad.points, quad_def):
+                        point.pos = pos
+            
+            for cube in rubik.cubes:
+                for i, quad in enumerate(cube.quads):
+                    quad.normal = [0,0,0]
+                    if i < 3:
+                        quad.normal[i] = 1
+                    else:
+                        quad.normal[i-3] = -1
+            
+            colors = [
+                ROUGE, JAUNE, BLEU, # x, y, z
+                ORANGE, BLANC, VERT # -x, -y, -z
+            ]
+            
+            maxValue = rubik.maxValue # 1.5 for 3×3×3
+            for cube in rubik.cubes:
+                for quad in cube.quads:
+                    quad.color = NOIR
+                    quad.colorid = -1
+                    for dim in range(rubik.dimensions):
+                        if all((array(cube.pos) + point.pos)[dim] == maxValue for point in quad.points):
+                            quad.colorid = dim
+                            quad.color = colors[dim]
+                        elif all((array(cube.pos) + point.pos)[dim] == -maxValue for point in quad.points):
+                            quad.colorid = dim + 3
+                            quad.color = colors[dim + 3]
+            
+            i = 0
+            for cub in rubik.cubes:
+                beg = i
+                i += 6 * 4
+                cub.span = range(beg, i)
     
-def creer_vao_rubiks(shader):
-    rubik = Rubik()
+    def copy(self):
+        return Rubik(self)
     
-    def make(dim, rev):
-        """
-        make(0, False) =
-        [0.5, 0.5, 0.5],
-        [0.5, 0.5, -0.5],
-        [0.5, -0.5, -0.5],
-        [0.5, 0.5, -0.5]
-        """
-        V = [-0.5 if rev else 0.5] * 3
-        d1 = (dim + 1) % 3
-        d2 = (dim + 2) % 3
-        for i in range(4):
-            yield list(V)
-            V[d1], V[d2] = V[d2], -V[d1]
+    def __add__(self, other):
+        S = Rubik(self)
+        S.radd(other)
+        return S
     
-    quad_defs = [
-        list(make(i, False)) for i in range(3)
-    ] + [
-        list(reversed(list(make(i, True)))) for i in range(3)
-    ] # 6 quads of 4 points of 3 reals
+    def __radd__(self, other):
+        for cub in self.cubes:
+            cub.matrix = cub.matrix @ other
+            for d in range(3):
+                cub.matrix[d][3] /= 2
+        return S
     
-    for cub in rubik.cubes:
-        for quad, quad_def in zip(cub.quads, quad_defs):
-            for point, pos in zip(quad.points, quad_def):
-                point.pos = pos
+    def __eq__(self, other):
+        return all(
+            (a.matrix == b.matrix).all()
+            for a,b in zip(self.cubes, other.cubes))
     
-    all_normals = [[1,0,0], [0,1,0], [0,0,1], [-1,0,0], [0,-1,0], [0,0,-1]] * (9 * 3)
-    all_normals = [x for x in all_normals for i in range(4)]
-    all_normals = array(all_normals, dtype=numpy.float32).flatten()
-    all_normals2 = all_normals
+    def solved(self):
+        D = {}
+        for cub in self.cubes:
+            sub_matrix = cub.rotmatrix
+            for quad in cub.quads:
+                if quad.color != NOIR:
+                    d = tuple(sub_matrix @ quad.normal)
+                    if d not in D:
+                        D[d] = tuple(quad.color)
+                    elif D[d] != tuple(quad.color):
+                        return False
+        return True
     
-    for cube in rubik.cubes:
-        for i, quad in enumerate(cube.quads):
-            quad.normal = [0,0,0]
-            if i < 3:
-                quad.normal[i] = 1
-            else:
-                quad.normal[i-3] = -1
+    def cubAt(self, pos):
+        return next(cub for cub in self.cubes
+                    if (cub.transvec == pos).all())
     
-    colors = [
-        ORANGE, JAUNE, VERT, # x, y, z
-        ROUGE, BLANC, BLEU   # -x, -y, -z
-    ]
+    def identifyOLL(self):
+        import itertools
+        TOP = [
+            self.cubAt((x,1,z)).colorIdAt((0,1,0))
+            for z,x in itertools.product((-1,0,1), repeat=2)
+        ] # left-top, top, right-top,  second-row, third-row
+        
+        center_color = TOP[4]
+        n = sum(center_color == v for v in TOP)
+        COLL = center_color == TOP[1] == TOP[3] == TOP[4] == TOP[5] == TOP[7] # COLL
+        answer = None
+        if n == 5 + 1:
+            for i in range(4):
+                if (self.cubAt((-1,1,-1)).colorIdAt((0,1,0)) == center_color
+                    == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
+                    answer = 'sune', i
+                elif (self.cubAt((1,1,-1)).colorIdAt((0,1,0)) == center_color
+                    == self.cubAt((1,1,1)).colorIdAt((1,0,0))):
+                    answer = 'antisune', i
+                Moves["U"](self)
+        elif n == 5 + 0:
+            for i in range(4):
+                if (self.cubAt((-1,1,-1)).colorIdAt((-1,0,0)) == center_color
+                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                    answer = 'pi', i
+                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                    answer = answer or ('flip', i)
+                Moves["U"](self)
+        elif n == 5 + 2:
+            for i in range(4):
+                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                    answer = 'headlights', i
+                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                    == self.cubAt((-1,1,1)).colorIdAt((0,0,1))):
+                    answer = 'cameleon', i
+                if (self.cubAt((1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                    == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
+                    answer = 'bowtie', i
+                Moves["U"](self)
+        elif n == 5 + 4:
+            answer = 'solved', 0
+        return 'COLL' if COLL else '', n, answer
     
-    maxValue = rubik.maxValue # 1.5 for 3×3×3
-    for cube in rubik.cubes:
-        for quad in cube.quads:
-            quad.color = NOIR
-            for dim in range(rubik.dimensions):
-                if all((array(cube.pos) + point.pos)[dim] == maxValue for point in quad.points):
-                    quad.color = colors[dim]
-                elif all((array(cube.pos) + point.pos)[dim] == -maxValue for point in quad.points):
-                    quad.color = colors[dim + 3]
-    
+def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]
     all_colors = array(all_colors, dtype=numpy.float32).flatten()
     all_positions = [point.pos for cub in rubik.cubes for quad in cub.quads for point in quad.points]
     all_positions = array(all_positions, dtype=numpy.float32).flatten()
     all_normals = [quad.normal for cub in rubik.cubes for quad in cub.quads for point in quad.points]
     all_normals = array(all_normals, dtype=numpy.float32).flatten()
-    
-    i = 0
-    for cub in rubik.cubes:
-        beg = i
-        i += 6 * 4
-        cub.span = range(beg, i)
     
     alls = {
         'color': (all_colors, 3, GL_FLOAT),
@@ -406,7 +552,7 @@ def creer_vao_rubiks(shader):
     
     glBindVertexArray(0)
     
-    return vao, rubik
+    return vao
 
 class Modifier:
     
@@ -478,11 +624,15 @@ class Move:
         for cub in self.select(rubik):
             cub.matrix = self.matrix @ cub.matrix
     
+    def inv(self):
+        return Move(self.selector, self.axe, -self.direction, **kwargs)
+    
 Unit = [array((1,0,0)), array((0,1,0)), array((0,0,1))]
 Moves = {}
 for i, (a, b) in enumerate(("RL", "UD", "FB")):
     Moves[a] = Move(Modifier.cub_of_axe, Unit[i], -1)
-    Moves[b] = Move(Modifier.cub_of_axe, -Unit[i], +1)
+    Moves[b] = Move(Modifier.cub_of_axe, -Unit[i], -1)
+Moves["O"] = Move(Modifier.cub_of_general_movement, Unit[0], -1, subset=())
 
 for k,move in list(Moves.items()):
     Moves[k.lower()] = Moves[k + "w"] = Move(Modifier.cub_of_wide, move.axe, move.direction)
@@ -494,8 +644,31 @@ for i, a in enumerate("MSE"):
     Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], -1, subset={1})
 
 for k,move in list(Moves.items()):
-    Moves[k + "'"] = Move(move.selector, move.axe, -move.direction)
-                
+    Moves[k + "2"] = Move(move.selector, move.axe, move.direction * 2)
+    
+for k,move in list(Moves.items()):
+    new = Moves[k + "'"] = Move(move.selector, move.axe, -move.direction)
+    new.opp = move
+    move.opp = new
+
+class alg:
+    @staticmethod
+    def parse(string):
+        import re
+        return re.findall("[ORLFBUDrlfbudxyz]w?2?'?", string)
+    
+    @staticmethod
+    def inv(string):
+        return ''.join(next(k for k,v in Moves.items() if v == Moves[m].opp)
+                       for m in reversed(alg.parse(string)))
+    @staticmethod
+    def close(A,B):
+        return A + B + alg.inv(A)
+    
+    @staticmethod
+    def commute(A,B):
+        return A + B + alg.inv(A) + alg.inv(B)
+
 def main():
     pygame.init()
     
@@ -508,61 +681,120 @@ def main():
         shaders.compileShader(vertex_shader, GL_VERTEX_SHADER),
         shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER))
 
-    vao_rubiks, rubik = creer_vao_rubiks(shader)
+    global rubik
+    rubik = Rubik()
+    vao_rubiks = creer_vao_rubiks(shader, rubik)
+    basic_rubik = Rubik()
     t = 0
-
+    import itertools
+    
+    Sexy = commute("R", "U") # R U R' U'
+    Longerxy = "R U R' F"
+    MyAntiSune = "R U2 R' U' R U' R'" # close(R, close(U, commute(U, R')))
+    MySune = "L' U2' L U L' U L"
+    
+    FrontNSexy = lambda i: "F" + Sexy * i + "F'"
+    
+    chosen_move = alg.parse(
+        MyAntiSune + "O"
+    )
+    
+    move_cycle = iter(chosen_move)
+    move_cycle = itertools.cycle(chosen_move)
+        
     fini = 0
+    rcamx = rcamy = 0
+    go = True
+    period = 2
+    stopAtO = False
     while fini == 0:
         # pour tous les événements qui se sont passsés depuis la dernière fois
+        pressed = pygame.key.get_pressed()
+        mouse_buttons = pygame.mouse.get_pressed()
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT: # si l'event est de type QUIT
                 fini = 1 # on met fini à 1, ce qui va quitter la boucle à la fin de ce tick
             elif event.type == pygame.VIDEORESIZE:
                 # on s'adapte à la nouvelle fenêtre
                 ecran = nouvel_ecran(event.w, event.h) # re créer l'écran !
-
+            elif event.type == pygame.MOUSEMOTION:
+                if mouse_buttons[0]:
+                    rcamx += 0.20 * event.rel[0]
+                    rcamy += 0.20 * event.rel[1]
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 3: # right click
+                    rcamx = rcamy = 0
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_s:
+                    rcamx = rcamy = 0
+                elif event.key == pygame.K_SPACE:
+                    go = not go
+        
+        if pressed[pygame.K_LEFT]:
+            rcamx += 1
+        if pressed[pygame.K_RIGHT]:
+            rcamx -= 1
+        if pressed[pygame.K_UP]:
+            rcamy += 1
+        if pressed[pygame.K_DOWN]:
+            rcamy -= 1
+        
         # logic
         from random import choice, randrange, randint
         from functools import partial
         randc = lambda *arguments: choice(arguments)
         
-        if t % 60 == 0:
-            def random_interval():
-                i = randint(0,2)
-                j = randint(i, 2)
-                return [i,j]
-            
-            move = Move(Modifier.cub_of_general_close,
-                interval = random_interval(),
-                direction = randc(-1,1,2,-2),
-                axe = Unit[randc(0,1,2)])
-            
-            prev_matrix = {}
-            for cub in move.select(rubik):
-                prev_matrix[cub] = cub.matrix
+        if go:
+            P = period
+            if t % P == 0:
+                def random_interval():
+                    i = randint(0,2)
+                    j = randint(i, 2)
+                    return [i,j]
                 
-        elif 1 <= t % 60 < 59:
-            r = (t % 60 - 1) / (59 - 1)
-            for cub in move.select(rubik):
-                cub.matrix = GenericRotationMatrix(r * move.direction * 90, move.axe) @ prev_matrix[cub]
-        
-        elif t % 60 == 59:
-            for cub in move.select(rubik):
-                cub.matrix = GenericRotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
-            del prev_matrix
+                try:
+                    move = Moves[next(move_cycle)]
+                    if (move.selector == Modifier.cub_of_general_movement and 
+                        len(move.kwargs['subset']) == 0): # Null move
+                        print('{0: 5}'.format(t // P), 'Solved' if rubik.solved() else ' ' * len('Solved'), rubik.identifyOLL())
+                        if stopAtO:
+                            go = False
                 
-        t += 1
+                    # Move(Modifier.cub_of_general_close,
+                    #     interval = random_interval(),
+                    #     direction = randc(-1,1,2,-2),
+                    #     axe = Unit[randc(0,1,2)])
+                    
+                    prev_matrix = {}
+                    for cub in move.select(rubik):
+                        prev_matrix[cub] = cub.matrix
+                except StopIteration:
+                    move = None
+                    
+            elif move and 1 <= t % P < P-1:
+                r = (t % P - 1) / (P-1 - 1)
+                for cub in move.select(rubik):
+                    cub.matrix = GenericRotationMatrix(r * move.direction * 90, move.axe) @ prev_matrix[cub]
+            
+            elif move and t % P == P-1:
+                for cub in move.select(rubik):
+                    cub.matrix = GenericRotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
+                del prev_matrix, move
+            
+            t += 1
         
         # dessin
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glUseProgram(shader)
         
-        P = PerspectiveMatrix(45, 1.0 * tx / ty, 0.01, 10) # fov 45°, ratio tx / ty, distance min : 100, distance max : 2000
+        P = PerspectiveMatrix(45, 1.0 * tx / ty, 0.01, 20) # fov 45°, ratio tx / ty, distance min : 100, distance max : 2000
 
         # position et orientation de la camera :
-        x,z = 5 * polar(t * 0.01)
-        y = 5 * sin(t * 0.02)
-        x,y,z = 5,5,5
+        x,z = norm((5,5)) * polard(45 + t * 1.0 * 0 + rcamx * 2.5)
+        y = norm((5,5)) + rcamy * 0.30 # norm((5,5)) * cos(t * 0.02 * 0 + radians(rcamy))
+        # x,y,z = 10 * sphericald(90 * cos(t * 0.005), 180 * cos(t * 0.006))
+        x,y,z = normalized((x,y,z)) * 10
         V = LookAtMatrix(x,y,z, 0,0,0, 0,1,0)
 
         # position de la lampe :
