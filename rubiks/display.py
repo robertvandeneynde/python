@@ -696,7 +696,7 @@ def main():
     FrontNSexy = lambda i: "F" + Sexy * i + "F'"
     
     chosen_move = alg.parse(
-        MyAntiSune + "O"
+        MyAntiSune + Sexy + "O"
     )
     
     move_cycle = iter(chosen_move)
