@@ -1,0 +1,44 @@
+MySune
+(L' U2' L U L' U L)
+    7        ('COLL', 6, ('antisune', 3))
+   15        ('COLL', 5, ('flip', 1))
+   23        ('COLL', 7, ('bowtie', 3))
+   31        ('COLL', 5, ('flip', 0))
+   39        ('COLL', 6, ('sune', 0))
+   47 Solved ('COLL', 9, ('solved', 0))
+
+MyAntiSune
+(R U2 R' U' R U' R')
+    7        ('COLL', 6, ('sune', 1))
+   15        ('COLL', 5, ('flip', 1))
+   23        ('COLL', 7, ('bowtie', 0))
+   31        ('COLL', 5, ('flip', 0))
+   39        ('COLL', 6, ('antisune', 0))
+   47 Solved ('COLL', 9, ('solved', 0))
+
+MySune U
+(L' U2' L U L' U L) U
+    8        ('COLL', 6, ('antisune', 2))
+   17        ('COLL', 5, ('pi', 2))
+   26        ('COLL', 6, ('sune', 0))
+   35 Solved ('COLL', 9, ('solved', 0))
+   
+MyAntiSune U
+(R U2 R' U' R U' R') U
+    8        ('COLL', 6, ('sune', 0))
+   17        ('COLL', 5, ('pi', 3))
+   26        ('COLL', 6, ('antisune', 0))
+   35 Solved ('COLL', 9, ('solved', 0))
+
+MySune U2
+(L' U2' L U L' U L) U2
+    8        ('COLL', 6, ('antisune', 1))
+   17        ('COLL', 6, ('sune', 0))
+   26 Solved ('COLL', 9, ('solved', 0))
+   
+MyAntiSune U2
+(R U2 R' U' R U' R') U2
+    8        ('COLL', 6, ('sune', 3))
+   17        ('COLL', 6, ('antisune', 0))
+   26 Solved ('COLL', 9, ('solved', 0))
+   
