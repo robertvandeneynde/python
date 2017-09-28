@@ -10,14 +10,46 @@ from operator import *
 from collections import *
 from fractions import Fraction
 from fractions import Fraction as F
-from datetime import date, datetime, timedelta
+from datetime import date, time, datetime, timedelta
+import html
 import random
 from random import randint, randrange, shuffle, choice
 import argparse
-import html
 import unicodedata
 import re
 import json
+
+import operator
+ops = {
+    '+': operator.add,
+    '-': operator.sub,
+    '/': operator.truediv,
+    '//': operator.floordiv,
+    '*': operator.mul,
+    '%': operator.mod,
+    '@': operator.matmul,
+    '&': operator.and_,
+    '^': operator.xor,
+    '~': operator.invert,
+    '|': operator.or_,
+    '**': operator.pow,
+    '<<': operator.lshift,
+    '>>': operator.rshift,
+    '<': operator.lt,
+    '<=': operator.le,
+    '==': operator.eq,
+    '!=': operator.ne,
+    '>=': operator.ge,
+    '>': operator.gt,
+    'not': operator.not_,
+    'is': operator.is_,
+    'is not': operator.is_not,
+    'and': operator.and_,
+    'or': operator.or_,
+}
+
+# re
+Re = re.compile
 
 # numpy
 try:

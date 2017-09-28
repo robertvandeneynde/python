@@ -14,11 +14,12 @@ def greenizebold(s):
 
 # decorator
 def _multiple_makes_lmap(f):
-    return lambda s: f(s) if len(s) == 1 else _lmap(f, s)
+    # return lambda s: f(s) if len(s) == 1 else _lmap(f, s)
+    return lambda s, *args: f(s, *args) if len(s) == 1 else [f(x, *args) for x in s]
     
 @_multiple_makes_lmap
-def uniname(s):
-    return unicodedata.name(s)
+def uniname(s, *args):
+    return unicodedata.name(s, *args)
     
 @_multiple_makes_lmap
 def hexord(s):

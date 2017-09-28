@@ -272,7 +272,7 @@ def couleur01(r,g,b):
 ROUGE = couleur01(255, 0, 0)
 VERT = couleur01(0, 255, 0)
 BLEU = couleur01(0, 0, 255)
-JAUNE = couleur01(255, 255, 0)
+JAUNE = couleur01(255, 255, 0x44)
 BLANC = couleur01(255, 255, 255)
 NOIR = couleur01(0, 0, 0)
 ORANGE = couleur01(255, 153, 0)
@@ -477,49 +477,213 @@ class Rubik:
                     if (cub.transvec == pos).all())
     
     def identifyOLL(self):
+        OLL = True
         import itertools
-        TOP = [
-            self.cubAt((x,1,z)).colorIdAt((0,1,0))
-            for z,x in itertools.product((-1,0,1), repeat=2)
-        ] # left-top, top, right-top,  second-row, third-row
+        center_color = self.cubAt((0,1,0)).colorIdAt((0,1,0))
         
-        center_color = TOP[4]
-        n = sum(center_color == v for v in TOP)
-        COLL = center_color == TOP[1] == TOP[3] == TOP[4] == TOP[5] == TOP[7] # COLL
+        TOP = [
+            center_color == self.cubAt((x,1,z)).colorIdAt((0,1,0))
+            for z,x in itertools.product((-1,0,1), repeat=2)
+        ]
+        
+        ## TOP ##
+        # 0 1 2 #
+        # 3 4 5 #
+        # 6 7 8 #
+        #########
+        
+        LTOP = [TOP[i] for i in (2,1,0, 5,4,3, 8,7,6)]
+        ## LTOP ##
+        # 2 1 0 #
+        # 5 4 3 #
+        # 8 7 6 #
+        #########
+        
+        n = sum(TOP) - 1
+        nOCLL = sum(TOP[i] for i in (1, 3, 5, 7))
+        OCLL = nOCLL == 4
         answer = None
-        if n == 5 + 1:
-            for i in range(4):
-                if (self.cubAt((-1,1,-1)).colorIdAt((0,1,0)) == center_color
-                    == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
-                    answer = 'sune', i
-                elif (self.cubAt((1,1,-1)).colorIdAt((0,1,0)) == center_color
-                    == self.cubAt((1,1,1)).colorIdAt((1,0,0))):
-                    answer = 'antisune', i
-                Moves["U"](self)
-        elif n == 5 + 0:
-            for i in range(4):
-                if (self.cubAt((-1,1,-1)).colorIdAt((-1,0,0)) == center_color
-                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                    answer = 'pi', i
-                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                    answer = answer or ('flip', i)
-                Moves["U"](self)
-        elif n == 5 + 2:
-            for i in range(4):
-                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                    == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                    answer = 'headlights', i
-                if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                    == self.cubAt((-1,1,1)).colorIdAt((0,0,1))):
-                    answer = 'cameleon', i
-                if (self.cubAt((1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                    == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
-                    answer = 'bowtie', i
-                Moves["U"](self)
-        elif n == 5 + 4:
-            answer = 'solved', 0
-        return 'COLL' if COLL else '', n, answer
+        if OCLL:
+            r = n - 4
+            for i in (3,2,1,0):
+                Moves["U'"](self)
+                
+                if r == 1:
+                    if (self.cubAt((-1,1,-1)).colorIdAt((0,1,0)) == center_color
+                        == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
+                        answer = 'sune', i
+                    elif (self.cubAt((1,1,-1)).colorIdAt((0,1,0)) == center_color
+                        == self.cubAt((1,1,1)).colorIdAt((1,0,0))):
+                        answer = 'antisune', i
+                elif r == 0:
+                    if (self.cubAt((-1,1,-1)).colorIdAt((-1,0,0)) == center_color
+                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                        answer = 'pi', i
+                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                        answer = 'flip', i
+                elif r == 2:
+                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
+                        answer = 'headlights', i
+                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                        == self.cubAt((-1,1,1)).colorIdAt((0,0,1))):
+                        answer = 'chameleon', i
+                    if (self.cubAt((1,1,-1)).colorIdAt((0,0,-1)) == center_color
+                        == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
+                        answer = 'bowtie', i
+                elif r == 4:
+                    answer = 'solved', i
+        else: # not OCLL
+            for i in (3,2,1,0):
+                Moves["U'"](self)
+                
+                TOP = [
+                    center_color == self.cubAt((x,1,z)).colorIdAt((0,1,0))
+                    for z,x in itertools.product((-1,0,1), repeat=2)
+                ]
+                
+                LTOP = [TOP[i] for i in (2,1,0, 5,4,3, 8,7,6)]
+                
+                right = [center_color == self.cubAt((x,1,z)).colorIdAt((+1,0,0)) for x,z in ((+1,+1), (+1,0), (+1,-1))]
+                left  = [center_color == self.cubAt((x,1,z)).colorIdAt((-1,0,0)) for x,z in ((-1,+1), (-1,0), (-1,-1))]
+                top   = [center_color == self.cubAt((x,1,z)).colorIdAt((0,0,-1)) for x,z in ((-1,-1), (0,-1), (+1,-1))]
+                bot   = [center_color == self.cubAt((x,1,z)).colorIdAt((0,0,+1)) for x,z in ((-1,+1), (0,+1), (+1,+1))]
+                
+                cpattern = [TOP[i] for i in (0, 2, 8, 6)]
+                pattern = [TOP[i] for i in (1, 5, 7, 3)]
+                
+                clpattern = [LTOP[i] for i in (0, 2, 8, 6)]
+                lpattern = [LTOP[i] for i in (1, 5, 7, 3)]
+                
+                if n == 0:
+                    if all(right) and all(left):
+                        answer = 'Blank', i
+                    elif not all(right) and all(left):
+                        answer = 'Zamboni', i
+                elif n == 1:
+                    # No-Edge
+                    if TOP[2] and sum(right) == 2:
+                        answer = 'Nazi', i
+                    elif TOP[8] and sum(right) == 2:
+                        answer = 'Anti-Nazi', i
+                elif n == 2:
+                    if nOCLL == 0:
+                        # No-Edge
+                        if cpattern == [0,1,0,1]:
+                            answer = 'Diagonal', i
+                        elif cpattern == [0,1,1,0] and all(left):
+                            answer = 'Crown', i
+                        elif cpattern == [1,1,0,0]:
+                            answer = 'Bunny', i
+                    else: # nOCLL == 2
+                        # L-Shapes
+                        for A, p, T, hand in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (right, left)):
+                            if p == [1,0,0,1] and not all(hand) and not all(bot):
+                                answer = A + 'Breakneck', i
+                            elif p == [1,0,0,1] and all(hand):
+                                answer = A + 'Frying Pan', i
+                            elif p == [0,0,1,1] and all(hand):
+                                if A == '':
+                                    answer = 'Right back squeezy', i
+                                else:
+                                    answer = 'Right front squeezy', i
+                        
+                        # I-Shapes 
+                        if pattern == [1,0,1,0] and all(left) and all(right):
+                            answer = 'Highway', i
+                        elif pattern == [0,1,0,1] and sum(right) == 2 and sum(left) == 2:
+                            answer = 'Streetlights', i
+                        elif pattern == [0,1,0,1] and sum(right) == 2 and sum(left) == 0:
+                            answer = 'Ant', i
+                        elif pattern == [1,0,1,0] and not all(left) and all(right):
+                            answer = 'Rice Cooker', i
+                        
+                elif n == 3:
+                    for A, p, T in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP)):
+                        
+                        # Square shape
+                        if p == [0,1,1,0] and T[8]:
+                            if A == '':
+                                answer = 'Right back wide antisune', i
+                            else:
+                                answer = 'Right front wide antisune', i
+                            
+                        # Small lightning bolt shapes
+                        if p == [1,0,0,1] and T[6]:
+                            if A == '':
+                                answer = 'Wide Sune', i
+                            else:
+                                answer = 'Wide Antisune', i
+                        elif p == [0,0,1,1] and T[0]:
+                            if A == '':
+                                answer = 'Downstairs', i
+                            else:
+                                answer = 'Upstairs', i
+                        
+                        # Fish shape
+                        if p == [1,1,0,0] and T[6]:
+                            answer = A + 'Kite', i
+                        # Knight move shapes
+                        if p == [0,1,0,1] and T[6] and sum(bot) == 2:
+                            answer = A + 'Gun', i
+                        if p == [0,1,0,1] and T[8] and sum(bot) == 1:
+                            answer = A + 'Squeegee', i
+                        
+                elif n == 4:
+                    for A, p, T, L, R in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (left, right), (right, left)):
+                        # P-Shapes
+                        if p == [0,0,1,1] and not all(R) and T[0] and T[6]:
+                            answer = A + 'Couch', i
+                        if p == [0,1,1,0] and all(L) and T[2] and T[8]:
+                            answer = A + 'P', i
+                        
+                        # Big lightning bolt shapes
+                        if p == [0,1,0,1] and sum(R) == 1 and T[2] and T[6]:
+                            answer = A + 'Fung', i
+                        
+                        # Awkward 
+                        if p == [0,0,1,1] and sum(R) == 2 and T[0] and T[2]:
+                            answer = A + 'Spotted Chameleon', i
+                        if p == [0,1,1,0] and sum(L) == 1 and T[0] and T[2]:
+                            answer = A + 'Awkward Fish', i
+                        
+                        # W Shapes 
+                        if p == [0,1,1,0] and sum(L) == 2 and T[2] and T[6]:
+                            answer = A + 'Moustache', i
+                    
+                    # Fish Shape
+                    if pattern == [0,1,1,0] and sum(left) == 1 and TOP[0] and TOP[8]:
+                        answer = 'Fish Salad', i
+                    if pattern == [0,0,1,1] and sum(right) == 2 and TOP[2] and TOP[6]:
+                        answer = 'Untying', i
+                    
+                    # C-Shapes
+                    if pattern == [0,1,0,1] and not all(top) and TOP[6] and TOP[8]:
+                        answer = 'City', i
+                    
+                    if pattern == [1,0,1,0] and all(right) and TOP[0] and TOP[6]:
+                        answer = 'Seeing Headlights', i
+                    
+                    # T-Shapes 
+                    if pattern == [0,1,0,1] and TOP[2] and TOP[8]:
+                        if sum(bot) == 2:
+                            answer = 'Tying', i
+                        elif sum(bot) == 1:
+                            answer = 'Suit Up', i
+                    
+                    # AllCorners 
+                    if pattern == [0,0,0,0]:
+                        answer = 'Checkers', i
+                    
+                elif n == 6:
+                    # AllCorners 
+                    if pattern == [1,0,0,1]:
+                        answer = 'Arrow', i
+                    elif pattern == [0,1,0,1]:
+                        answer = 'Mummy', i
+                    
+        return ('OCLL', n, answer[0], answer[1]) if OCLL else ('OLL', n, answer[0], answer[1])
     
 def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]
@@ -640,34 +804,82 @@ for k,move in list(Moves.items()):
 for i, letter in enumerate("xyz"):
     Moves[letter] = Move(Modifier.cub_of_rotation, Unit[i], -1)
 
-for i, a in enumerate("MSE"):
-    Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], -1, subset={1})
+for i, a in enumerate("MES"):
+    Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], +1, subset={1})
 
 for k,move in list(Moves.items()):
     Moves[k + "2"] = Move(move.selector, move.axe, move.direction * 2)
     
 for k,move in list(Moves.items()):
-    new = Moves[k + "'"] = Move(move.selector, move.axe, -move.direction)
+    new = Moves[k + "'"] = Move(move.selector, move.axe, -move.direction, **move.kwargs)
     new.opp = move
     move.opp = new
 
+def allstatic(Class):
+    for x in dir(Class):
+        if not x.startswith('__'):
+            setattr(Class, x, staticmethod(getattr(Class, x)))
+    return Class
+
+@allstatic
 class alg:
-    @staticmethod
+    
     def parse(string):
         import re
-        return re.findall("[ORLFBUDMSErlfbudxyz]w?2?'?", string)
+        toks = re.findall("[ORLFBUDMSExyzrlfbud]w?2?'?|\(|\)\d*", string)
+        
+        stack = [[]]
+        for t in toks:
+            if t == '(':
+                stack.append([])
+            elif t.startswith(')'):
+                n = int(t[1:] or 1)
+                stack[-2].extend(stack.pop() * n)
+            else:
+                stack[-1].append(t)
+        
+        if len(stack) != 1:
+            raise ValueError("Parenthesis not closed !")
+        
+        return stack[-1]
     
-    @staticmethod
+    def simplify(string):
+        L = alg.parse(string)
+        i = 0
+        R = re.compile("([ORLFBUD]w?|[MSExyzrlfbud])(2?'?)")
+        
+        def T(x):
+            l,n = R.match(x).groups()
+            n = (1 if not n else
+                 2 if "2" in n else
+                 -1)
+            if l.endswith('w'):
+                l = l[0].lower()
+            return l,n
+        
+        while i < len(L) - 1:
+            (l1,n1),(l2,n2) = T(L[i]), T(L[i+1])
+            if l1 == l2:
+                n = (n1 + n2) % 4
+                if n == 0:
+                    del L[i:i+2]
+                    i = max(0, i-1)
+                else:
+                    L[i] = l1 + ('' if n == 1 else '2' if n == 2 else "'")
+                    del L[i+1]
+            else:
+                i += 1
+                
+        return L
+    
     def inv(string):
         return ''.join(next(k for k,v in Moves.items() if v == Moves[m].opp)
                        for m in reversed(alg.parse(string)))
     
-    @staticmethod
     def close(A,B):
         """ [A: B] """
         return A + B + alg.inv(A)
     
-    @staticmethod
     def commute(A,B):
         """ [A,B] """
         return A + B + alg.inv(A) + alg.inv(B)
@@ -685,6 +897,31 @@ class alg:
             SUB[v] = k
             
         return ''.join(SUB[x] for x in alg.parse(string))
+
+def readOLL():
+    from collections import OrderedDict
+    OLLS = OrderedDict({})
+    oll = None
+    state = 1
+    with open('oll.csv') as f:
+        for l in f:
+            T = l.strip().split('\t')
+            if not l.strip():
+                state = 1
+            elif state == 1:
+                name = T[0]
+                OLLS[name] = oll = []
+                state = 2
+            elif state == 2:
+                rubik_state = T[0].strip()
+                assert rubik_state == 'OLL'
+                
+                algo = T[1]
+                try:
+                    oll.append(alg.parse(algo))
+                except:
+                    print('Unparsable', algo)
+    return OLLS
 
 def main():
     pygame.init()
@@ -710,6 +947,8 @@ def main():
     MyAntiSune = "R U2 R' U' R U' R'" # [R: [U: [U, R']]]
     MySune = "L' U2' L U L' U L"
     
+    OLLS = readOLL()
+    
     FrontNSexy = lambda i: "F" + Sexy * i + "F'"
     DoubleFrontNSexy = lambda i: "f" + Sexy * i + "f'"
     
@@ -717,18 +956,26 @@ def main():
     Double = DoubleFrontNSexy(1)
     
     chosen_move = alg.parse(
-        Sexy
+        # Sexy
+        # MySune + 'O' + "U'" + MyAntiSune
+        ''.join(
+            alg.inv(''.join(OLLS[k][0])) + 'O' + ''.join(OLLS[k][0]) + 'O'
+            for k in list(OLLS)[20:]
+        )
+        # "F" + "URU'R'" * 3 + "F'" + 'U O'
+        # ''.join('F' + Sexy * i + "F' O" + alg.inv('F' + Sexy * i + "F'") + 'O' for i in range(6))
     )
     
     move_cycle = iter(chosen_move)
-    move_cycle = itertools.cycle(chosen_move)
+    # move_cycle = itertools.cycle(chosen_move)
         
     fini = 0
     rcamx = rcamy = 0
     go = True
-    period = 50
-    stopAtO = False
+    period = 2 # 20 # 50
+    stopAtO = not True
     RANDOM = 0 # 'subset'
+    move = None
     while fini == 0:
         # pour tous les événements qui se sont passsés depuis la dernière fois
         pressed = pygame.key.get_pressed()
@@ -752,6 +999,13 @@ def main():
                     rcamx = rcamy = 0
                 elif event.key == pygame.K_SPACE:
                     go = not go
+                elif event.key == pygame.K_u:
+                    move = Moves["U"]
+                    go = True
+                    
+                    prev_matrix = {}
+                    for cub in move.select(rubik):
+                        prev_matrix[cub] = cub.matrix
         
         if pressed[pygame.K_LEFT]:
             rcamx += 1
@@ -809,7 +1063,8 @@ def main():
             elif move and t % P == P-1:
                 for cub in move.select(rubik):
                     cub.matrix = GenericRotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
-                del prev_matrix, move
+                del prev_matrix
+                move = None
             
             t += 1
         
