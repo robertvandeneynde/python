@@ -476,6 +476,35 @@ class Rubik:
         return next(cub for cub in self.cubes
                     if (cub.transvec == pos).all())
     
+    def identify(self):
+        cross = 0
+        for i in range(4):
+            Moves["y"](self)
+            if (self.cubAt((0,-1,1)).colorIdAt((0,0,1)) == self.cubAt((0,0,1)).colorIdAt((0,0,1)) and
+                self.cubAt((0,-1,1)).colorIdAt((0,-1,0)) == self.cubAt((0,-1,0)).colorIdAt((0,-1,0))):
+                cross += 1
+        if cross < 4:
+            return 'Unsolved', 'Cross:' + str(cross)
+        
+        corner = 0
+        f2l = 0
+        for i in range(4):
+            Moves["y"](self)
+            if (self.cubAt((1,-1,1)).colorIdAt((0,0,1)) == self.cubAt((0,0,1)).colorIdAt((0,0,1)) and
+                self.cubAt((1,-1,1)).colorIdAt((1,0,0)) == self.cubAt((1,0,0)).colorIdAt((1,0,0))):
+                corner += 1
+                if (self.cubAt((1,0,1)).colorIdAt((0,0,1)) == self.cubAt((0,0,1)).colorIdAt((0,0,1)) and
+                    self.cubAt((1,0,1)).colorIdAt((1,0,0)) == self.cubAt((1,0,0)).colorIdAt((1,0,0))):
+                    f2l += 1
+        
+        if f2l == 4:
+            return self.identifyOLL()
+        
+        if corner == 4:
+            return 'Corners', 'F2L:' + str(f2l)
+        
+        return 'Cross', 'Corner:' + str(corner), 'F2L:' + str(f2l)
+    
     def identifyOLL(self):
         OLL = True
         import itertools
@@ -683,7 +712,7 @@ class Rubik:
                     elif pattern == [0,1,0,1]:
                         answer = 'Mummy', i
                     
-        return ('O' if OCLL else '') + 'CLL', answer[0], answer[1]
+        return ('OCLL' if OCLL else 'OLL'), answer[0], answer[1]
     
 def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]
@@ -958,10 +987,11 @@ def main():
     chosen_move = alg.parse(
         # Sexy
         # MySune + 'O' + "U'" + MyAntiSune
-        ''.join(
-            alg.inv(''.join(OLLS[k][0])) + 'O' + ''.join(OLLS[k][0]) + 'O'
-            for k in list(OLLS)[20:]
-        )
+        ''.join(random.choice('RUFLDB') for i in range(10))
+        #''.join(
+            #alg.inv(''.join(OLLS[k][0])) + 'O' + ''.join(OLLS[k][0]) + 'O'
+            #for k in list(OLLS)[20:]
+        #)
         # "F" + "URU'R'" * 3 + "F'" + 'U O'
         # ''.join('F' + Sexy * i + "F' O" + alg.inv('F' + Sexy * i + "F'") + 'O' for i in range(6))
     )
@@ -972,7 +1002,7 @@ def main():
     fini = 0
     rcamx = rcamy = 0
     go = True
-    period = 2 # 20 # 50
+    period = 20 # 2 # 20 # 50
     stopAtO = not True
     RANDOM = 0 # 'subset'
     move = None
@@ -1002,22 +1032,37 @@ def main():
                     pygame.K_f: "F",
                     pygame.K_b: "B",
                     pygame.K_r: "R",
+                    pygame.K_m: "M",
+                    pygame.K_e: "E",
+                    pygame.K_s: "S",
+                    pygame.K_x: "x",
+                    pygame.K_y: "y",
+                    pygame.K_z: "z",
                 }
                 
-                if event.key == pygame.K_s:
+                if event.key == pygame.K_z:
                     rcamx = rcamy = 0
                 elif event.key == pygame.K_SPACE:
                     go = not go
+                elif event.key == pygame.K_i:
+                    print(*rubik.identify())
                 elif event.key in MOVE_KEY:
                     Shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
-                    move = Moves[MOVE_KEY[event.key]]
+                    Control = bool(pygame.key.get_mods() & pygame.KMOD_CTRL)
+                    
+                    key = (str.lower if Control else str.upper)(MOVE_KEY[event.key]) + Shift * "'"
+                    key = next(key for key in (key, key.lower(), key.upper()) if key in Moves)
+                    
+                    #move = Moves[key]
+                    #if not go:
+                        #prev_matrix = {}
+                        #for cub in move.select(rubik):
+                            #prev_matrix[cub] = cub.matrix
                     
                     if not go:
                         go = True
-                        
-                        prev_matrix = {}
-                        for cub in move.select(rubik):
-                            prev_matrix[cub] = cub.matrix
+                        t = 0
+                        move_cycle = iter(alg.parse(key))
         
         if pressed[pygame.K_LEFT]:
             rcamx += 1
@@ -1057,7 +1102,7 @@ def main():
                         move = Moves[next(move_cycle)]
                         if (move.selector == Modifier.cub_of_general_movement and 
                             len(move.kwargs['subset']) == 0): # Null move
-                            print('{0: 5}'.format(t // P), 'Solved' if rubik.solved() else ' ' * len('Solved'), rubik.identifyOLL())
+                            print('{0: 5}'.format(t // P), 'Solved' if rubik.solved() else ' ' * len('Solved'), *rubik.identify())
                             if stopAtO:
                                 go = False
                 
