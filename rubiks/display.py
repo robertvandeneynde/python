@@ -683,7 +683,7 @@ class Rubik:
                     elif pattern == [0,1,0,1]:
                         answer = 'Mummy', i
                     
-        return ('OCLL', n, answer[0], answer[1]) if OCLL else ('OLL', n, answer[0], answer[1])
+        return ('O' if OCLL else '') + 'CLL', answer[0], answer[1]
     
 def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]
@@ -995,17 +995,29 @@ def main():
                 if event.button == 3: # right click
                     rcamx = rcamy = 0
             elif event.type == pygame.KEYDOWN:
+                MOVE_KEY = {
+                    pygame.K_u: "U",
+                    pygame.K_d: "D",
+                    pygame.K_l: "L",
+                    pygame.K_f: "F",
+                    pygame.K_b: "B",
+                    pygame.K_r: "R",
+                }
+                
                 if event.key == pygame.K_s:
                     rcamx = rcamy = 0
                 elif event.key == pygame.K_SPACE:
                     go = not go
-                elif event.key == pygame.K_u:
-                    move = Moves["U"]
-                    go = True
+                elif event.key in MOVE_KEY:
+                    Shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+                    move = Moves[MOVE_KEY[event.key]]
                     
-                    prev_matrix = {}
-                    for cub in move.select(rubik):
-                        prev_matrix[cub] = cub.matrix
+                    if not go:
+                        go = True
+                        
+                        prev_matrix = {}
+                        for cub in move.select(rubik):
+                            prev_matrix[cub] = cub.matrix
         
         if pressed[pygame.K_LEFT]:
             rcamx += 1
