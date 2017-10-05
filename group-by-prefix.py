@@ -57,7 +57,7 @@ for l in os.listdir(args.dir):
     if dir and l != prefix and l.startswith(args.prefix):
         L.append(l)
         nl_base = l[len(args.prefix):] if not args.no_rename else l
-        nl_base_new = re.sub('^([\.-*]|\s)+', '', nl_base)
+        nl_base_new = re.sub('^([.*-]|\s)+', '', nl_base)
         if nl_base != nl_base_new:
             Renames.append((nl_base, nl_base_new, prefix))
         os.rename(l, os.path.join(prefix, nl_base))

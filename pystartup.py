@@ -58,6 +58,8 @@ try:
     from numpy import array, matrix
     from numpy import cross, dot
     from numpy.linalg import norm
+    def c(*args, **kwargs):
+        return numpy.array(args, **kwargs)
 except:
     pass
 
@@ -110,10 +112,13 @@ def normalized(x):
 # 3D + funcoperators, inline |dot| |cross| product
 try:
     import funcoperators as fo
-    dot = fo.infix(numpy.dot)
-    cross = fo.infix(numpy.cross)
-    f = F = div = frac = fo.infix(Fraction)
+    try:
+        dot = fo.infix(numpy.dot)
+        cross = fo.infix(numpy.cross)
+    except:
+        pass
     normalized = fo.unary(normalized)
+    f = F = div = frac = fo.infix(Fraction)
     del fo
 except:
     pass

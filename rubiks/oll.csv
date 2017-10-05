@@ -1,6 +1,6 @@
-Sune
-OLL 	(U L U' R') (U L' U' R) 	
+Sune, S, Swimming Left
 OLL 	R U R' U R U2 R' 	Cube Camera Icon.png[1]
+OLL 	(U L U' R') (U L' U' R) 	
 OLL 	y' R' U2 R U R' U R 	
 OLL 	y L' U2 L U L' U L 	
 OLL 	y2 L U L' U L U2 L' 	
@@ -8,12 +8,12 @@ OLL 	R U' L' U R' U' L
 OLL 	U2 r2 U R' U' L' U R U' r' (x') 	
 OLL 	y' U R U' L' U R' U' L
 
-Antisune
+Antisune, -S, Swimming Right
+OLL 	L' U' L U' L' U2 L 	Cube Camera Icon.png[2]
 OLL 	(R' U L U') (R U L') 	
 OLL 	y2 R' U' R U' R' U2 R 	
 OLL 	y' R U2 R' U' R U' R' 	
 OLL 	y L U2 L' U' L U' L' 	
-OLL 	L' U' L U' L' U2 L 	Cube Camera Icon.png[2]
 OLL 	L' U R U' L U R' 	
 OLL 	y' L' U R U' L U R' 	
 OLL 	y' R U2 R' U2' R' F R2 U' R' U' R U R' F'
@@ -112,7 +112,7 @@ OLL 	y' R2 D R' U R D' R' U' R'
 OLL 	R2 D' R U' R' D R U R 	
 OLL 	(y') R2 D R' U R D' R' U' R'
 
-Blank
+Blank,  Runway
 OLL 	(R U2) (R2' F R F' U2') (R' F R F') 	Cube Camera Icon.png[3]
 OLL 	R U B' R B R2 U' R' F R F' 	
 OLL 	(y) S U F R2 U' R2 U' R2 U R2 f' 	
@@ -128,21 +128,21 @@ OLL 	(y) l' U' l U2 l' U2 L U2 L' U l
 OLL 	(y2) F R' F' R U R2 B' R' B U' R' 	
 OLL 	(y2) (F R' F' R) U2 F R' F' R2 U2 R'
 
-Anti-Nazi
+Anti-Nazi, Anti-Mouse
 OLL 	(y) f (R U R' U') f' U' F (R U R' U') F' 	
 OLL 	(y2) r' R2 U R' U r U2 r' U R' r 	Cube Camera Icon.png[5]
 OLL 	(y2) M U l' U2 l U L' U L M' 	
 OLL 	(y2) r' R2 U R' U r U2 r' U M' 	
 OLL 	(M'U) (r'U2 r U) (R' U R2 r')
 
-Nazi
+Nazi, Mouse
 OLL 	f (R U R' U') f' U F (R U R' U') F' 	
 OLL 	R' U2 x R' U R U' y R' U' R' U R' F 	
 OLL 	(y) r' R U' r U2 r' U' R U' R2' r 	
 OLL 	(y) M U' r U2' r' U' R U' R' M' 	
 OLL 	l L2 U' L U' l' U2 l U' M'
 
-Slash
+Slash, Diagonal
 OLL 	R U R' U (R' F R F') U2 (R' F R F') 	
 OLL 	f (R U R' U') y' r' (R U R' U') R' F R F' 	
 OLL 	F R' F' l R L' U R U' R' U' M' 	
@@ -210,14 +210,14 @@ OLL 	(y2) F U R U' R' F'
 OLL 	(y) R U y' L U' L' B' 	
 OLL 	(y) F U R' F R F' U' F' 	
 
-Anti-Moustache
+Anti-Moustache, Sea-Mew, Wario
 OLL 	R' U' R U' R' U R U R y R' F' R 	
 OLL 	R' U' R U' R' U R U R B' R' B 	
 OLL 	(y2) (L' U' L U') (L' U L U) (L F' L' F) 	
 OLL 	(R U R' U') y (L' U2' L U) y' (R U R') 	
 OLL 	(R U R' U' F') (U2' F U) (R U R')
 
-Moustache
+Moustache, Mario
 OLL 	(y2) (R U R' U) (R U' R' U') (R' F R F') 	
 OLL 	L U L' U L U' L' U' L' B L B' 	
 OLL 	(L' U' L U) y' (R U2 R' U') y (L' U' L)
@@ -235,7 +235,7 @@ OLL 	R' U' x (R' U R U')2 x' U R
 
 Frying Pan
 OLL 	l' U' L U' L' U L U' L' U2 l 	
-OLL 	(y') l U2 L U L' U' L U L' U' l' 	
+# OLL 	(y') l U2 L U L' U' L U L' U' l' 	
 OLL 	(y2) r' U' R U' R' U R U' R' U2 r 	
 OLL 	(y') r' U2 R U R' U' R U R' U r 	
 OLL 	(y') r U2 R' U' R U' r' R U2 R' U' R U' R' 	
@@ -246,7 +246,7 @@ Anti-Frying Pan
 OLL 	r U R' U R U' R' U R U2 r' 	
 OLL 	(y') r U2 R' U' R U R' U' R U' r' 	
 OLL 	(y2) l U L' U L U' L' U L U2 l' 	
-OLL 	(y) l' U2 L U L' U' L U L' U' l 	
+# OLL 	(y) l' U2 L U L' U' L U L' U' l 	
 OLL 	(y2) r' U' R U' R' U2 r R' U' R U' R' U2 R 	
 OLL 	(y) r' U2 R U R' U r R' U2 R U R' U R 	
 OLL 	(y) f (R U R' U') (R U R' U') f' F (R U R' U') F' 	
@@ -293,19 +293,19 @@ OLL 	(y) F U F l' U' l U' F'
 OLL 	R U l U' R' U F' l' 	
 OLL 	(y2) L F U' R U R' F' L'
 
-Tying
+Tying, Tying Schoelaces, Key
 OLL 	(R U R' U') (R' F R F') 	
 OLL 	(y2) (L' U' L U) (L F' L' F) 	
 OLL 	R' U' R U l U' R' U x 	
 OLL 	R U R' F' U' F R U' R' 	
 
-Suit up
+Suit Up
 OLL 	F (R U R' U') F' 	
 OLL 	f' (U' L' U L) f 	
 OLL 	(y2) f (U R U' R') f' 	
 OLL 	(y2) F' (L' U' L U) F
 
-Highway
+Highway, Freeway
 OLL 	(y) R' F (R U R U') R2 F' R2 U' R' (U R U R') 	Cube Camera Icon.png[7]
 OLL 	R U2 R2 U' R U' R' U2 F R F' 	
 OLL 	R' U2 R2 U R' U R U2 y l' U' l 	
@@ -322,16 +322,16 @@ OLL 	(y) r U2 R' U' M (R U R' U') r U' r'
 OLL 	(y) F (R U R' U') S (R U R' U') S' (R U R' U') F' 	
 OLL 	R' U' (F R' F' R) F (U R U' R') F' R 
 
-Streetlights
+Streetlights, Dead Man
 OLL 	r U r' U R U' R' U R U' R' r U' r' 	
 OLL 	r' U' r U' R' U R U' R' U R r' U r 	
 OLL 	L F L' U R U' R' U R U' R' L F' L' 	
 OLL 	F R U R' U' R F' r U R' U' r' 	
 OLL 	r U r' U R U' R' M' U R U2 r' 	
 OLL 	F R U R' U' F' r U R' U' r' F R F' 	
-OLL 	l U l' (U L U' L')2 l U' l
+OLL 	l U l' (U L U' L')2 l U' l'
 
-Ant
+Ant, Bottlecap
 OLL 	F U R U' R' U R U' R' F' 	
 OLL 	(y2) f R U R' U' R U R' U' f' 	
 OLL 	(y') R' U2 R U R' F R' F' R U R 	
@@ -345,13 +345,13 @@ OLL 	(R U R' U R U2 R') U (F U R U' R' F')
 OLL 	(y) (r U2 R' U' R U' r') (F R U R' U' F') 	
 OLL 	(y') F R U R' U F' U' F U' F'
 
-Lefty Square
+Lefty Square, Right back wide antisune, RBWAS
 OLL 	(r' U2) (R U R' U r) 	Cube Camera Icon.png[8]
 OLL 	(y2) R' F2 L F L' F R 	Cube Camera Icon.png[9]
 OLL 	(y2) l' U2 L U L' U l 	
 OLL 	(y) x' U' l2 U l F' l U
 
-Righty Square
+Righty Square, Right front wide antisune, RFWAS
 OLL 	(y2) r U2 R' U' R U' r' 	
 OLL 	l U2 L' U' L U' l'
 
@@ -369,25 +369,25 @@ OLL 	R' F (R U R' U') F' U R
 OLL 	(y2) f R' F' R U R U' R' S' 	
 OLL 	(y2) L' B L U L' U' B' U L
 
-Lighting
+Lightning, Wide Sune
 OLL 	r U R' U R U2 r' 	
 OLL 	(y) B L F' L F L2 B' 	
 OLL 	F R' F' R U2 R U2 R' 	
 OLL 	L' U2 L U2 L F' L' F
 
-Anti-Lighting
+Anti-Lighting, Left Wide Sune, LWS, Wide Antisune, Reverse Lightning
 OLL 	l' U' L U' L' U2 l 	
 OLL 	(y2) r' U' R U' R' U2 r 	
 OLL 	(y') B' R' F R' F' R2 B 	
 OLL 	R U2 R' U2 R' F R F'
 
-Downstairs
+Downstairs, Anti-Upstairs
 OLL 	F' (L' U' L U) F y F (R U R' U') F' 	
 OLL 	R U' R' U' R U' R' U2 F' U F U' R U R' 	
 OLL 	(y) r U R' U R' F R F' R U2 r' 	
 OLL 	(y') r' R2 U R' U R U2 R' U M'
 
-Upstairs
+Upstairs, Anti-Downstairs
 OLL 	F (R U R' U') F' U F (R U R' U') F' 	
 OLL 	(y) F R U R2 F R y' R2 U R U2 R' 	
 OLL 	(y') r R2' U' R U' R' U2 R U' R r' 	
@@ -397,7 +397,7 @@ Kite
 OLL 	(y') (R U R' U') R' F R2 U R' U' F' 	
 OLL 	(y') R' U' R y r U' r' U r U r' 	
 OLL 	(y') R' U' R y' x' R U' R' F R U R' x 	
-OLL 	(y') R' U' R x U' R' U y R U y' R U' x' 	
+# OLL 	(y') R' U' R x U' R' U y R U y' R U' x' 	
 OLL 	(y) L' U' L y l U' l' U l U l' 	
 OLL 	R' U' R U' R' U R' F R F' U R 	
 OLL 	(y2) R U2 R' M' U' R U' R' U M
@@ -418,7 +418,7 @@ OLL 	(y') R' U2 (R l) U' R' U l' U2 R
 OLL 	(y) R2 D r' U r D' r' U' R' U M' 	
 OLL 	f (R U R' U') f' (R U R' U R U2 R')
 
-Untying
+Untying, Mounted Fish, Untying Shoelaces
 OLL 	(y) F R U' R' U' R U R' F' 	
 OLL 	(y) R' F R F' U' F' U F 	
 OLL 	(y) R' F R F' y' U' R' U R 	
@@ -431,7 +431,7 @@ OLL 	R U R' F' U F R U' R'
 OLL 	(y') r2 D' r U' r' D r U r 	
 OLL 	(y2) M' U' L' U l y' U R U' R'
 
-Gun
+Gun, Trigger
 OLL 	F U R U' R2 F' R U R U' R' 	
 OLL 	F U R U2 R' U' R U R' F' 	
 OLL 	r U' r' U' r U r' y' R' U R 	
@@ -439,7 +439,7 @@ OLL 	(y2) x' R U' R' F' R U R' x y R' U R
 OLL 	(y2) f R U R2 U' R' U R U' f' 	
 OLL 	R U2 L' U' L U2 R' U' L F' L' F
 
-Anti-Gun
+Anti-Gun, Anti-Trigger
 OLL 	R' F R U R' F' R y' R U' R' 	
 OLL 	l' U l U l' U' l y' R U' R' 	
 OLL 	(y') R' U' y' R' U R2 B R' U' R' U R 	
@@ -489,20 +489,20 @@ OLL 	(y') (R' U' R U' R' U2 R) U' (R U R' U') (R' F R F')
 OLL 	(y2) r2 D r' U' r D' r2' U r U r' 	
 OLL 	(y') r' D' r U' r' D r2 U' r' U r U r'
 
-Awkward Fish
+Awkward Fish, Dalmation
 OLL 	R U' R' U2 R U y R U' R' y' U' R' 	
 OLL 	(y) R U2' R' U' R U' R2 y L' U' L U F 	
 OLL 	(y2) F U R U' R' F' R' U2 R U R' U R 	
 OLL 	(y2) (R U R' U R U2 R') F (R U R' U') F' 	
 OLL 	(y2) r R2 y' R' U' R U y R U' M 	
 OLL 	(y2) R2 L z' l' U' R d L U' L l' 	
-OLL 	(y') (L F' L' F)2 L U' L' U L U' L 	
+# OLL 	(y') (L F' L' F)2 L U' L' U L U' L 	
 OLL 	(y2) M' R' F' U' F U R U' M 	
 OLL 	R' M2 U' F' U F r U' M' 	
 OLL 	(y) (R B' R' B)2 R' U' R U R' U' R 	
 OLL 	(y') r U2 R' U' R U' r' U' R U R' U R U2 R'
 
-Anti-Awkward Fish
+Anti-Awkward Fish, Anti-Dalmation
 OLL 	r' R2 y R U R' U' y' R' U M' 	
 OLL 	R' U' R U F R U R' U' R' U R U' F' 	
 OLL 	L' U L U2 L' U' y' L' U L U F 	
@@ -514,7 +514,7 @@ OLL 	(M R) (f R f') (U' R' U M')
 OLL 	(M U) (F R U R' U' F') M' 	
 OLL 	(R' U' R U' R' U2 R) F (R U R' U') F'
 
-Arrow
+Arrow, Stealth, Arrowhead, Fish
 OLL 	r U R' U' r' R U R U' R' 	
 OLL 	(y) r U2 R' U' R U' r' R U R' U R U2 R' 	
 OLL 	r U R' U R U2 r' R U2 R' U' R U' R' 	
@@ -544,7 +544,7 @@ OLL 	(y) L F' L' S' L F L'S
 OLL 	(y') M U R U R' U' M' U R U' R' 	
 OLL 	R2 F2 L F L' F2 R F' R
 
-Mummy
+Mummy, H, I, Brick
 OLL 	R U R' U' M' U R U' r' 	
 OLL 	M' U' M' U' M' d2 M' U' M' U' M' 	
 OLL 	M' U M' U M' d2 M' U M' U M' 	
@@ -565,7 +565,7 @@ OLL 	(y) M' U M U M' U M U' M' U' M
 OLL 	(y) M' U' M U' M' U' M U M' U M 	
 OLL 	(y) M U' M' U' M U' M' U M U M' 	
 OLL 	(y) M U M' U M U M' U' M U' M' 	
-OLL 	M U M' U' F2 M U M' U' F2 	
+OLL 	M U M' U' B2 M U M' U' B2 	
 OLL 	M' U' M U F2 M' U' M U F2 	
 OLL 	M2 U' F2 U' M' U M2 F2 U M 	
 OLL 	F M' F U M2 U2 M2 U F' M F' 

@@ -5,10 +5,10 @@ Example :
     [{name, addresses:[{id, lat, lng}]]
     [] -> must be a list
     {} -> must be a dict
-    {hello, world} -> must be a dict that has "hello" and "world" (and maybe more !) 
+    {hello, world} -> must be a dict that has "hello" and "world" (and maybe more !)
     int -> must be a int
     str -> must be a string
-    
+
     {hello:[int]} -> must have hello, that must be a list of int
     [int] -> must be a list of Type
 
@@ -16,7 +16,7 @@ Tokens : remove all spaces, group by "[a-zA-z_]" "[" "]" ":" "{" "}" ","
     [{name, addresses:[{id, lat, lng}]]
     => [ { name , addresses : [ { id , lat , lng } ] ]
     => [ { I , I : [ { I , I , I } ] } ]
-    
+
 Grammar :
     Type := List | Dict | "int" | "str" | "float" | "number"
     List := "[" Type? "]"
@@ -40,16 +40,16 @@ class Checker:
                         c if c in "{[]}:," else None
                 )
             ]
-            
+
             assert not any(a is None for a in tokens), "has a unknown character"
-            
+
             def in_pre(t):
                 return (
                     t[0] == '['
                     or t[0] == '{'
                     or t[0] == 'I' and t[1] in ('str', 'int', 'float', 'number')
                 )
-            
+
             def f(tokens):
                 '''
                 returns (data, number of read tokens (> 1))
@@ -65,7 +65,7 @@ class Checker:
                         assert 1+g in range(len(tokens)), "next token must be a ]"
                         assert tokens[1+g][0] == ']', "next token must be a ]"
                         return ('List', d), 2+g
-                    
+
                 elif tokens[0][0] == '{':
                     assert 1 in range(len(tokens)), "must have next token"
                     if tokens[1][0] == '}':
@@ -94,13 +94,13 @@ class Checker:
                                 break
                         assert found_close, "must have a }"
                         return ('Dict', ds), 2 + i
-                
+
                 elif tokens[0][0] == 'I':
                     assert tokens[0][1] in ('int', 'str', 'float', 'number'), "must be a correct type"
                     return ('Data', tokens[0][1]), 1
                 else:
                     assert False
-            
+
             d,g = f(tokens)
             assert g == len(tokens), "must eat all the tokens and not {} (on {})".format(g, len(tokens))
         except AssertionError as e:
@@ -110,9 +110,9 @@ class Checker:
                 raise ValueError("scheme {} is mal formed".format(string))
         except ValueError as e:
             raise ValueError("scheme {} is mal formed : {}".format(string, e))
-        
+
         self.scheme = d
-    
+
     def check(self, data):
         def f(s, d):
             typ, dat = s
@@ -135,16 +135,16 @@ class Checker:
                 (
                     dat == 'int' and isinstance(d, int) or
                     dat == 'float' and isinstance(d, float) or
-                    dat == 'str' and isinstance(d, str) or 
+                    dat == 'str' and isinstance(d, str) or
                     dat == 'number' and isinstance(d, (int,float)) or False
                 )
                 if typ == 'Data' else
                 False # never happens
             )
-                
-            
+
+
         return f(self.scheme, data)
-    
+
 def tests():
     x = 1 # something of any type
     i = 1 # something of type int

@@ -220,7 +220,7 @@ def SimpleRotationMatrix(angle, axe=Axe.Z):
     ], dtype=numpy.float32)
 
 
-def GenericRotationMatrix(angle, axe):
+def RotationMatrix(angle, axe):
     """
     returns the rotation matrix for angle in degree around any axe
     """
@@ -484,7 +484,7 @@ class Rubik:
                 self.cubAt((0,-1,1)).colorIdAt((0,-1,0)) == self.cubAt((0,-1,0)).colorIdAt((0,-1,0))):
                 cross += 1
         if cross < 4:
-            return 'Unsolved', 'Cross:' + str(cross)
+            return 'Cross', cross
         
         corner = 0
         f2l = 0
@@ -501,9 +501,9 @@ class Rubik:
             return self.identifyOLL()
         
         if corner == 4:
-            return 'Corners', 'F2L:' + str(f2l)
+            return 'F2L', f2l
         
-        return 'Cross', 'Corner:' + str(corner), 'F2L:' + str(f2l)
+        return 'Corner', corner, 'F2L', f2l
     
     def identifyOLL(self):
         OLL = True
@@ -533,36 +533,34 @@ class Rubik:
         OCLL = nOCLL == 4
         answer = None
         if OCLL:
+            TOP_LEFT, TOP_RIGHT = (-1,1,-1), (1,1,-1)
+            BOT_LEFT, BOT_RIGHT = (-1,1,1), (1,1,1)
+            UP, RIGHT, LEFT, FACING, BACKING = (0,1,0), (1,0,0), (-1,0,0), (0,0,1), (0,0,-1)
+            C = lambda POS, DIR: self.cubAt(POS).colorIdAt(DIR)
+            
             r = n - 4
             for i in (3,2,1,0):
                 Moves["U'"](self)
                 
                 if r == 1:
-                    if (self.cubAt((-1,1,-1)).colorIdAt((0,1,0)) == center_color
-                        == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
-                        answer = 'sune', i
-                    elif (self.cubAt((1,1,-1)).colorIdAt((0,1,0)) == center_color
-                        == self.cubAt((1,1,1)).colorIdAt((1,0,0))):
-                        answer = 'antisune', i
+                    if center_color == C(BOT_LEFT, UP) == C(BOT_RIGHT, FACING):
+                        answer = 'Sune', i
+                    if center_color == C(BOT_RIGHT, UP) == C(BOT_LEFT, FACING):
+                        answer = 'Antisune', i
                 elif r == 0:
-                    if (self.cubAt((-1,1,-1)).colorIdAt((-1,0,0)) == center_color
-                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                        answer = 'pi', i
-                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                        answer = 'flip', i
+                    if center_color == C(TOP_LEFT, LEFT) == C(TOP_RIGHT, BACKING):
+                        answer = 'Pi', i
+                    if center_color == C(TOP_LEFT, LEFT) == C(BOT_RIGHT, RIGHT):
+                        answer = 'Flip', i
                 elif r == 2:
-                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                        == self.cubAt((1,1,-1)).colorIdAt((0,0,-1))):
-                        answer = 'headlights', i
-                    if (self.cubAt((-1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                        == self.cubAt((-1,1,1)).colorIdAt((0,0,1))):
-                        answer = 'chameleon', i
-                    if (self.cubAt((1,1,-1)).colorIdAt((0,0,-1)) == center_color
-                        == self.cubAt((-1,1,1)).colorIdAt((-1,0,0))):
-                        answer = 'bowtie', i
+                    if center_color == C(TOP_LEFT, BACKING) == C(TOP_RIGHT, BACKING):
+                        answer = 'Headlights', i
+                    if center_color == C(TOP_LEFT, BACKING) == C(BOT_LEFT, FACING):
+                        answer = 'Chameleon', i
+                    if center_color == C(TOP_RIGHT, BACKING) == C(BOT_LEFT, LEFT):
+                        answer = 'Bowtie', i
                 elif r == 4:
-                    answer = 'solved', i
+                    answer = 'Solved', i
         else: # not OCLL
             for i in (3,2,1,0):
                 Moves["U'"](self)
@@ -600,19 +598,19 @@ class Rubik:
                     if nOCLL == 0:
                         # No-Edge
                         if cpattern == [0,1,0,1]:
-                            answer = 'Diagonal', i
+                            answer = 'Slash', i
                         elif cpattern == [0,1,1,0] and all(left):
                             answer = 'Crown', i
-                        elif cpattern == [1,1,0,0]:
+                        elif cpattern == [1,1,0,0] and not all(bot):
                             answer = 'Bunny', i
                     else: # nOCLL == 2
                         # L-Shapes
                         for A, p, T, hand in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (right, left)):
                             if p == [1,0,0,1] and not all(hand) and not all(bot):
                                 answer = A + 'Breakneck', i
-                            elif p == [1,0,0,1] and all(hand):
+                            elif p == [1,0,0,1] and sum(bot) == 1:
                                 answer = A + 'Frying Pan', i
-                            elif p == [0,0,1,1] and all(hand):
+                            elif p == [0,0,1,1] and sum(bot) == 1:
                                 if A == '':
                                     answer = 'Right back squeezy', i
                                 else:
@@ -714,6 +712,9 @@ class Rubik:
                     
         return ('OCLL' if OCLL else 'OLL'), answer[0], answer[1]
     
+    def apply(self, alg):
+        Alg(alg)(self)
+    
 def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]
     all_colors = array(all_colors, dtype=numpy.float32).flatten()
@@ -756,7 +757,7 @@ class Modifier:
     @staticmethod
     def turn(raxe, theta, rubik):
         for cub in Modifier.cub_of_axe(raxe, rubik):
-            cub.matrix = GenericRotationMatrix(theta, raxe) @ cub.matrix
+            cub.matrix = RotationMatrix(theta, raxe) @ cub.matrix
     
     @staticmethod
     def cub_of_general_movement(raxe, subset:'Subset[range(3)]', rubik):
@@ -808,7 +809,7 @@ class Move:
         self.axe = axe
         self.direction = direction
         self.kwargs = kwargs
-        self.matrix = GenericRotationMatrix(self.direction * 90, self.axe)
+        self.matrix = RotationMatrix(self.direction * 90, self.axe)
     
     def select(self, rubik):
         yield from self.selector(self.axe, rubik=rubik, **self.kwargs)
@@ -819,7 +820,7 @@ class Move:
     
     def inv(self):
         return Move(self.selector, self.axe, -self.direction, **self.kwargs)
-    
+
 Unit = [array((1,0,0)), array((0,1,0)), array((0,0,1))]
 Moves = {}
 for i, (a, b) in enumerate(("RL", "UD", "FB")):
@@ -828,16 +829,17 @@ for i, (a, b) in enumerate(("RL", "UD", "FB")):
 Moves["O"] = Move(Modifier.cub_of_general_movement, Unit[0], -1, subset=())
 
 for k,move in list(Moves.items()):
-    Moves[k.lower()] = Moves[k + "w"] = Move(Modifier.cub_of_wide, move.axe, move.direction)
+    Moves[k.lower()] = Move(Modifier.cub_of_wide, move.axe, move.direction)
+    Moves[k + "w"] = Move(Modifier.cub_of_wide, move.axe, move.direction)
     
 for i, letter in enumerate("xyz"):
     Moves[letter] = Move(Modifier.cub_of_rotation, Unit[i], -1)
 
 for i, a in enumerate("MES"):
-    Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], +1, subset={1})
+    Moves[a] = Move(Modifier.cub_of_general_movement, Unit[i], +1 if a != 'S' else -1, subset={1})
 
 for k,move in list(Moves.items()):
-    Moves[k + "2"] = Move(move.selector, move.axe, move.direction * 2)
+    Moves[k + "2"] = Move(move.selector, move.axe, move.direction * 2, **move.kwargs)
     
 for k,move in list(Moves.items()):
     new = Moves[k + "'"] = Move(move.selector, move.axe, -move.direction, **move.kwargs)
@@ -856,6 +858,24 @@ class alg:
     def parse(string):
         import re
         toks = re.findall("[ORLFBUDMSExyzrlfbud]w?2?'?|\(|\)\d*", string)
+        """
+        toks = []
+        for c in string:
+            if c.strip() == '':
+                pass
+            elif c in 'ORLFBUDMSExyzrlfbud' or c in '()':
+                state = 'move'
+            elif not toks:
+                raise ValueError("Modifier must apply to somehting: " + c)
+            elif c in "'w":
+                if toks[-1][0] in '()':
+                    raise ValueError("Modifier cannot be applied to parenthesis: " + c)
+                toks[-1] += c
+            elif "0" <= c <= "9":
+                if toks[-1][0] in '(':
+                    raise ValueError("Modifier cannot be applied to open parenthesis: " + c)
+                toks[-1] += c
+        """
         
         stack = [[]]
         for t in toks:
@@ -902,8 +922,9 @@ class alg:
         return L
     
     def inv(string):
-        return ''.join(next(k for k,v in Moves.items() if v == Moves[m].opp)
-                       for m in reversed(alg.parse(string)))
+        return (' '.join if isinstance(string, str) else list)(
+            next(k for k,v in Moves.items() if v == Moves[m].opp)
+            for m in reversed(alg.parse(string) if isinstance(string, str) else string))
     
     def close(A,B):
         """ [A: B] """
@@ -925,20 +946,44 @@ class alg:
         for k, v in list(SUB.items()):
             SUB[v] = k
             
-        return ''.join(SUB[x] for x in alg.parse(string))
+        return ' '.join(SUB[x] for x in alg.parse(string))
 
-def readOLL():
+class Alg:
+    def __init__(self, arg):
+        if isinstance(arg, str):
+            arg = alg.parse(arg)
+        self.list = arg
+        self.moves = [Moves[k] for k in arg]
+    
+    def __call__(self, rubik):
+        for m in self.moves:
+            m(rubik)
+    
+    def on(self, rubik):
+        copy = Rubik(rubik)
+        self(copy)
+        return copy
+    
+    def inv(self):
+        return Alg(alg.inv(self.list))
+
+def readOLLS():
     from collections import OrderedDict
     OLLS = OrderedDict({})
     oll = None
     state = 1
+    
+    synonyms = {}
     with open('oll.csv') as f:
         for l in f:
+            if l.strip().startswith('#'):
+                continue
             T = l.strip().split('\t')
             if not l.strip():
                 state = 1
             elif state == 1:
-                name = T[0]
+                name = T[0].split(',')[0].strip()
+                synonyms[name] = {s.strip() for s in T[0].split(',')}
                 OLLS[name] = oll = []
                 state = 2
             elif state == 2:
@@ -947,12 +992,37 @@ def readOLL():
                 
                 algo = T[1]
                 try:
-                    oll.append(alg.parse(algo))
+                    alg.parse(algo)
+                    oll.append(algo)
                 except:
                     print('Unparsable', algo)
-    return OLLS
+    
+    for k, L in list(synonyms.items()):
+        for l in L:
+            synonyms[l] = synonyms[k]
+    
+    return OLLS, synonyms
 
-def main():
+def test_OLLS():
+    OLLS, synonyms = readOLLS()
+    cub = Rubik()
+    for name, list_of_alg in OLLS.items():
+        for algo in list_of_alg:
+            try:
+                Alg(alg.inv(algo))(cub)
+            except:
+                print("Cannot apply", alg.inv(algo))
+                cub = Rubik()
+                continue
+            try:
+                a,b,c = cub.identify()
+                assert name in synonyms[b]
+            except Exception as e:
+                print(name, cub.identify(), algo, alg.inv(algo), sep='\n', end='\n\n') # type(e), e, 
+                
+            Alg(algo)(cub)
+
+def main(rubik=None, use_move=None, period=None):
     pygame.init()
     
     tx, ty = taille = [800, 600]
@@ -964,8 +1034,8 @@ def main():
         shaders.compileShader(vertex_shader, GL_VERTEX_SHADER),
         shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER))
 
-    global rubik
-    rubik = Rubik()
+    if rubik is None:
+        rubik = Rubik()
     vao_rubiks = creer_vao_rubiks(shader, rubik)
     basic_rubik = Rubik()
     t = 0
@@ -976,7 +1046,7 @@ def main():
     MyAntiSune = "R U2 R' U' R U' R'" # [R: [U: [U, R']]]
     MySune = "L' U2' L U L' U L"
     
-    OLLS = readOLL()
+    OLLS, synonyms = readOLLS()
     
     FrontNSexy = lambda i: "F" + Sexy * i + "F'"
     DoubleFrontNSexy = lambda i: "f" + Sexy * i + "f'"
@@ -984,10 +1054,30 @@ def main():
     Simple = FrontNSexy(1)
     Double = DoubleFrontNSexy(1)
     
-    chosen_move = alg.parse(
+    chosen_move = alg.parse(use_move) if use_move is not None else alg.parse(
         # Sexy
         # MySune + 'O' + "U'" + MyAntiSune
-        ''.join(random.choice('RUFLDB') for i in range(10))
+        # ''.join(random.choice('RUFLDB') for i in range(10))
+        " O ".join([
+            "l U L U' L' U L U' L' U2' l' y",
+            "y' l U2 L U L' U' L U L' U' l'",
+            
+            "l' U L U' L' U L U' L' U2' l y'",
+            "y l' U2 L U L' U' L U L' U' l",
+            
+            "l' U l' L U L' U' L U L' U' l U' l'",
+            "l U l' U L U' L' U L U' L' l U' l",
+            
+            "x U R' y U' R' y' U' R U x' R' U R y",
+            "y' R' U' R x U' R' U y R U y' R U' x'",
+            
+            "L' U L' U' L U L' F' L F L' F' L F L' y",
+            "y' L F' L' F L F' L' F L U' L' U L U' L",
+            
+            "F2' U M U' M' F2' U M U' M'",
+            "M U M' U' F2 M U M' U' F2",
+        ])
+        
         #''.join(
             #alg.inv(''.join(OLLS[k][0])) + 'O' + ''.join(OLLS[k][0]) + 'O'
             #for k in list(OLLS)[20:]
@@ -996,13 +1086,16 @@ def main():
         # ''.join('F' + Sexy * i + "F' O" + alg.inv('F' + Sexy * i + "F'") + 'O' for i in range(6))
     )
     
-    move_cycle = iter(chosen_move)
-    # move_cycle = itertools.cycle(chosen_move)
+    if use_move:
+        move_cycle = iter(chosen_move)
+        # move_cycle = itertools.cycle(chosen_move)
+    else:
+        move_cycle = iter(())
         
     fini = 0
     rcamx = rcamy = 0
     go = True
-    period = 20 # 2 # 20 # 50
+    period = period if period is not None else 50 # 2 # 20 # 50
     stopAtO = not True
     RANDOM = 0 # 'subset'
     move = None
@@ -1115,11 +1208,11 @@ def main():
             elif move and 1 <= t % P < P-1:
                 r = (t % P - 1) / (P-1 - 1)
                 for cub in move.select(rubik):
-                    cub.matrix = GenericRotationMatrix(r * move.direction * 90, move.axe) @ prev_matrix[cub]
+                    cub.matrix = RotationMatrix(r * move.direction * 90, move.axe) @ prev_matrix[cub]
             
             elif move and t % P == P-1:
                 for cub in move.select(rubik):
-                    cub.matrix = GenericRotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
+                    cub.matrix = RotationMatrix(move.direction * 90, move.axe) @ prev_matrix[cub]
                 del prev_matrix
                 move = None
             
@@ -1160,6 +1253,33 @@ def main():
         clock.tick(60)
 
     pygame.quit()
+    
+    return rubik
+
+def show(cube, move=''):
+    return main(cube, move)
+
+def make_graph_move(move, nodes):
+    A = Alg(move)
+    r = Rubik()
+    OLLS, sy = readOLLS()
+    S = set()
+    for node in nodes:
+        P = Alg(OLLS[node][0])
+        P.inv()(r)
+        for j in range(4):
+            I = r.identify()
+            if I not in S:
+                print(*I)
+                A(r)
+                while r.identify() != I:
+                    print('>', *r.identify())
+                    S.add(r.identify())
+                    A(r)
+                S.add(I)
+            Alg("U'")(r)
+        P(r)
+        assert r.identify()[0] in ('OCLL', 'Solved')
 
 if __name__ == '__main__':
     main()
