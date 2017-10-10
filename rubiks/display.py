@@ -16,6 +16,8 @@ import numpy
 from numpy import array, linalg
 from numpy.linalg import norm
 
+from functools import reduce
+
 vertex_shader = """
 #version 330
 in vec3 position;
@@ -102,10 +104,17 @@ def sphericald(*args):
     elif len(args) == 2:
         p, t = args
         return spherical(radians(p), radians(t))
+    else:
+        raise TypeError("Accept 2 or 3 arguments")
 
-def vec2(x, y):
+def vec2(*args):
+    """
+    returns a vector in 3 dimensions
+    vec3(1,2,3)
+    vec3((1,2),3)
+    """
+    x, y = args
     return array((x, y), dtype=numpy.float32)
-
 
 def vec3(*args):
     """
@@ -532,6 +541,20 @@ class Rubik:
         nOCLL = sum(TOP[i] for i in (1, 3, 5, 7))
         OCLL = nOCLL == 4
         answer = None
+        
+        def try_answer(x, y, symmetry=None):
+            nonlocal answer
+            if False:
+                if answer is not None:
+                    if answer[0] == x:
+                        if symmetry is not None and (answer[1] - symmetry) % 4 == y:
+                            pass # OK
+                        else:
+                            print('DOUBLE', answer, 'VS', x, y)
+                    else:
+                        print('DOUBLE', answer, 'VS', x, y)
+            answer = (x, y)
+        
         if OCLL:
             TOP_LEFT, TOP_RIGHT = (-1,1,-1), (1,1,-1)
             BOT_LEFT, BOT_RIGHT = (-1,1,1), (1,1,1)
@@ -544,23 +567,23 @@ class Rubik:
                 
                 if r == 1:
                     if center_color == C(BOT_LEFT, UP) == C(BOT_RIGHT, FACING):
-                        answer = 'Sune', i
+                        try_answer('Sune', i)
                     if center_color == C(BOT_RIGHT, UP) == C(BOT_LEFT, FACING):
-                        answer = 'Antisune', i
+                        try_answer('Antisune', i)
                 elif r == 0:
                     if center_color == C(TOP_LEFT, LEFT) == C(TOP_RIGHT, BACKING):
-                        answer = 'Pi', i
+                        try_answer('Pi', i)
                     if center_color == C(TOP_LEFT, LEFT) == C(BOT_RIGHT, RIGHT):
-                        answer = 'Flip', i
+                        try_answer('Flip', i, symmetry=2)
                 elif r == 2:
                     if center_color == C(TOP_LEFT, BACKING) == C(TOP_RIGHT, BACKING):
-                        answer = 'Headlights', i
+                        try_answer('Headlights', i)
                     if center_color == C(TOP_LEFT, BACKING) == C(BOT_LEFT, FACING):
-                        answer = 'Chameleon', i
+                        try_answer('Chameleon', i)
                     if center_color == C(TOP_RIGHT, BACKING) == C(BOT_LEFT, LEFT):
-                        answer = 'Bowtie', i
+                        try_answer('Bowtie', i)
                 elif r == 4:
-                    answer = 'Solved', i
+                    try_answer('Solved', i, symmetry=1)
         else: # not OCLL
             for i in (3,2,1,0):
                 Moves["U'"](self)
@@ -585,130 +608,127 @@ class Rubik:
                 
                 if n == 0:
                     if all(right) and all(left):
-                        answer = 'Blank', i
+                        try_answer('Blank', i, symmetry=2)
                     elif not all(right) and all(left):
-                        answer = 'Zamboni', i
+                        try_answer('Zamboni', i)
                 elif n == 1:
                     # No-Edge
                     if TOP[2] and sum(right) == 2:
-                        answer = 'Nazi', i
-                    elif TOP[8] and sum(right) == 2:
-                        answer = 'Anti-Nazi', i
+                        try_answer('Nazi', i)
+                    elif TOP[2] and sum(top) == 2:
+                        try_answer('Anti-Nazi', i)
                 elif n == 2:
                     if nOCLL == 0:
                         # No-Edge
-                        if cpattern == [0,1,0,1]:
-                            answer = 'Slash', i
+                        if cpattern == [1,0,1,0] and sum(right) == 1:
+                            try_answer('Slash', i)
                         elif cpattern == [0,1,1,0] and all(left):
-                            answer = 'Crown', i
+                            try_answer('Crown', i)
                         elif cpattern == [1,1,0,0] and not all(bot):
-                            answer = 'Bunny', i
+                            try_answer('Bunny', i)
                     else: # nOCLL == 2
                         # L-Shapes
                         for A, p, T, hand in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (right, left)):
-                            if p == [1,0,0,1] and not all(hand) and not all(bot):
-                                answer = A + 'Breakneck', i
-                            elif p == [1,0,0,1] and sum(bot) == 1:
-                                answer = A + 'Frying Pan', i
-                            elif p == [0,0,1,1] and sum(bot) == 1:
+                            if p == [1,0,0,1] and sum(hand) == 1 and sum(bot) == 2:
+                                try_answer(A + 'Breakneck', i)
+                            elif p == [1,0,0,1] and sum(hand) == 3 and sum(bot) == 1:
+                                try_answer(A + 'Frying Pan', i)
+                            elif p == [0,0,1,1] and sum(hand) == 3 and sum(top) == 2:
                                 if A == '':
-                                    answer = 'Right back squeezy', i
+                                    try_answer('Right back squeezy', i)
                                 else:
-                                    answer = 'Right front squeezy', i
+                                    try_answer('Right front squeezy', i)
                         
                         # I-Shapes 
                         if pattern == [1,0,1,0] and all(left) and all(right):
-                            answer = 'Highway', i
+                            try_answer('Highway', i, symmetry=2)
                         elif pattern == [0,1,0,1] and sum(right) == 2 and sum(left) == 2:
-                            answer = 'Streetlights', i
+                            try_answer('Streetlights', i, symmetry=2)
                         elif pattern == [0,1,0,1] and sum(right) == 2 and sum(left) == 0:
-                            answer = 'Ant', i
+                            try_answer('Ant', i)
                         elif pattern == [1,0,1,0] and not all(left) and all(right):
-                            answer = 'Rice Cooker', i
+                            try_answer('Rice Cooker', i)
                         
                 elif n == 3:
-                    for A, p, T in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP)):
+                    for A, p, T, hand in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (right, left)):
                         
                         # Square shape
-                        if p == [0,1,1,0] and T[8]:
+                        if p == [0,1,1,0] and T[8] and sum(hand) == 1:
                             if A == '':
-                                answer = 'Right back wide antisune', i
+                                try_answer('Lefty Square', i)
                             else:
-                                answer = 'Right front wide antisune', i
+                                try_answer('Righty Square', i)
                             
                         # Small lightning bolt shapes
-                        if p == [1,0,0,1] and T[6]:
+                        if p == [1,0,0,1] and T[6] and sum(hand) == 2 and sum(bot) == 2:
+                            try_answer(A + 'Lightning', i) # Wide Sune, Left Wide Sune
+                        elif p == [0,0,1,1] and T[0] and sum(hand) == 2 and sum(bot) == 1 and sum(top) == 1:
                             if A == '':
-                                answer = 'Wide Sune', i
+                                try_answer('Downstairs', i)
                             else:
-                                answer = 'Wide Antisune', i
-                        elif p == [0,0,1,1] and T[0]:
-                            if A == '':
-                                answer = 'Downstairs', i
-                            else:
-                                answer = 'Upstairs', i
+                                try_answer('Upstairs', i)
                         
                         # Fish shape
-                        if p == [1,1,0,0] and T[6]:
-                            answer = A + 'Kite', i
+                        if p == [1,1,0,0] and T[6] and sum(hand) == 1 and sum(bot) == 1:
+                            try_answer(A + 'Kite', i)
                         # Knight move shapes
                         if p == [0,1,0,1] and T[6] and sum(bot) == 2:
-                            answer = A + 'Gun', i
+                            try_answer(A + 'Gun', i)
                         if p == [0,1,0,1] and T[8] and sum(bot) == 1:
-                            answer = A + 'Squeegee', i
+                            try_answer(A + 'Squeegee', i)
                         
                 elif n == 4:
                     for A, p, T, L, R in zip(('', 'Anti-'), (pattern, lpattern), (TOP, LTOP), (left, right), (right, left)):
                         # P-Shapes
                         if p == [0,0,1,1] and not all(R) and T[0] and T[6]:
-                            answer = A + 'Couch', i
+                            try_answer(A + 'Couch', i)
                         if p == [0,1,1,0] and all(L) and T[2] and T[8]:
-                            answer = A + 'P', i
+                            try_answer(A + 'P', i)
                         
                         # Big lightning bolt shapes
                         if p == [0,1,0,1] and sum(R) == 1 and T[2] and T[6]:
-                            answer = A + 'Fung', i
+                            try_answer(A + 'Fung', i)
                         
                         # Awkward 
                         if p == [0,0,1,1] and sum(R) == 2 and T[0] and T[2]:
-                            answer = A + 'Spotted Chameleon', i
+                            try_answer(A + 'Spotted Chameleon', i)
                         if p == [0,1,1,0] and sum(L) == 1 and T[0] and T[2]:
-                            answer = A + 'Awkward Fish', i
+                            try_answer(A + 'Awkward Fish', i)
                         
                         # W Shapes 
                         if p == [0,1,1,0] and sum(L) == 2 and T[2] and T[6]:
-                            answer = A + 'Moustache', i
+                            try_answer(A + 'Moustache', i)
                     
                     # Fish Shape
                     if pattern == [0,1,1,0] and sum(left) == 1 and TOP[0] and TOP[8]:
-                        answer = 'Fish Salad', i
+                        try_answer('Fish Salad', i)
                     if pattern == [0,0,1,1] and sum(right) == 2 and TOP[2] and TOP[6]:
-                        answer = 'Untying', i
+                        try_answer('Untying', i)
                     
                     # C-Shapes
                     if pattern == [0,1,0,1] and not all(top) and TOP[6] and TOP[8]:
-                        answer = 'City', i
+                        try_answer('City', i)
                     
                     if pattern == [1,0,1,0] and all(right) and TOP[0] and TOP[6]:
-                        answer = 'Seeing Headlights', i
+                        try_answer('Seeing Headlights', i)
                     
                     # T-Shapes 
                     if pattern == [0,1,0,1] and TOP[2] and TOP[8]:
                         if sum(bot) == 2:
-                            answer = 'Tying', i
+                            try_answer('Tying', i)
                         elif sum(bot) == 1:
-                            answer = 'Suit Up', i
+                            try_answer('Suit Up', i)
                     
                     # AllCorners 
                     if pattern == [0,0,0,0]:
-                        answer = 'Checkers', i
+                        try_answer('Checkers', i, symmetry=1)
                     
                 elif n == 6:
                     # AllCorners 
                     if pattern == [1,0,0,1]:
-                        answer = 'Arrow', i
+                        try_answer('Arrow', i)
                     elif pattern == [0,1,0,1]:
-                        answer = 'Mummy', i
+                        try_answer('Mummy', i, symmetry=2)
                     
         return ('OCLL' if OCLL else 'OLL'), answer[0], answer[1]
     
@@ -817,6 +837,7 @@ class Move:
     def __call__(self, rubik):
         for cub in self.select(rubik):
             cub.matrix = self.matrix @ cub.matrix
+    apply = __call__
     
     def inv(self):
         return Move(self.selector, self.axe, -self.direction, **self.kwargs)
@@ -958,14 +979,15 @@ class Alg:
     def __call__(self, rubik):
         for m in self.moves:
             m(rubik)
+    apply = __call__
     
     def on(self, rubik):
         copy = Rubik(rubik)
         self(copy)
         return copy
     
-    def inv(self):
-        return Alg(alg.inv(self.list))
+    def inv(self, r=None):
+        return Alg(alg.inv(self.list)) if r is None else self.inv()(r)
 
 def readOLLS():
     from collections import OrderedDict
@@ -1014,12 +1036,78 @@ def test_OLLS():
                 print("Cannot apply", alg.inv(algo))
                 cub = Rubik()
                 continue
-            try:
-                a,b,c = cub.identify()
-                assert name in synonyms[b]
-            except Exception as e:
-                print(name, cub.identify(), algo, alg.inv(algo), sep='\n', end='\n\n') # type(e), e, 
+            
+            Is = []
+            for i in range(4):
+                try:
+                    a,b,c = cub.identify()
+                    assert name in synonyms[b]
+                    Is.append(c)
+                except Exception as e:
+                    try:
+                        identification = cub.identify()
+                    except:
+                        identification = ('?', )
+                    print(name, identification, algo, alg.inv(algo), sep='\n', end='\n\n') # type(e), e, 
+                    Is.append(None)
+                Alg('U')(cub)
+            if all(x is not None for x in Is):
+                if not any(
+                    all((Is[i]-1)%P == Is[(i+1)%P] for i in range(4))
+                    for P in (1,2,4)
+                ):
+                    print('ERROR', Is)
                 
+            Alg(algo)(cub)
+            
+def test_OLLS_rot():
+    """
+    # 3 → y, 2 → y2, 1 → y'
+    3 Sune (U L U' R') (U L' U' R)
+    2 Antisune (R' U L U') (R U L')
+    3 Antisune y' L' U R U' L U R'
+    1 Flip L' U2 M' (y) R U2 R U2 R' U2 (y') l
+    1 Pi (R' U L U' R U L') U2 (R' U L U' R U L')
+    2 Headlights F (R U R' U') (R' F R F2) (L' U2 L)
+    2 Headlights R2' B2 R F2' R' B2 R F2' R
+    2 Bowtie y F' L F R' F' L' F R
+    1 Bowtie y' x U R' U' L U R U' r'
+    1 Bowtie y R' U' (R U R' F') (R U R' U') (R' F R2)
+    2 Bowtie x' R' D R U' R' D' R U x
+    2 Bowtie x R' U R D' R' U' R D x'
+    3 Bowtie y2 x L U' L' D L U L' D' x'
+    1 Bowtie U R U2 R' L' U' L U' R U' R' L' U2 L
+    2 Bowtie x U R' U' r x' U R U' r'
+    3 Nazi l L2 U' L U' l' U2 l U' M'
+    2 Slash F R' F' l R L' U R U' R' U' M'
+    1 Crown l' U' r' U2 L U2 L' U2 r U l
+    2 Crown (y) (F R' F' R) U2 (F R' F' R)(U' R U' R')
+    2 Crown (y) x (U R' U' R) B2 (U R' U' R)(B' R B' R') x'
+    2 Anti-Couch (y) M' U R U R' F' U' F R U' r'
+    2 Frying Pan (y') r U2 R' U' R U' r' R U2 R' U' R U' R'
+    1 Highway L F' L' U' L F' L' U L F L' U' M' U M
+    1 Highway (L F' L' U' L F' L' U L F L' U' L)(R' F R) L'
+    2 Arrow (y) r' U' R U' R' U2 r R' U2 R U R' U R
+    2 Arrow r' U2 R U R' U r R' U' R U' R' U2 R
+    """
+    OLLS, sy = readOLLS()
+    cub = Rubik()
+    for name, list_of_alg in OLLS.items():
+        for algo in list_of_alg[0:1]:
+            try:
+                Alg(algo).inv(cub)
+            except:
+                print("Cannot apply", alg.inv(algo))
+                cub = Rubik()
+                continue
+            print(name, cub.identify())
+            show(cub)
+            
+            id = cub.identify()
+            assert id[1] == name, "{} != {}".format(id[1], name)
+            if not id[2] == 0:
+                print(id[2], name, algo)
+            
             Alg(algo)(cub)
 
 def main(rubik=None, use_move=None, period=None):
@@ -1256,16 +1344,20 @@ def main(rubik=None, use_move=None, period=None):
     
     return rubik
 
-def show(cube, move=''):
-    return main(cube, move)
+def show(cube, move='', **kwargs):
+    return main(cube, move, **kwargs)
 
 def make_graph_move(move, nodes):
     A = Alg(move)
     r = Rubik()
     OLLS, sy = readOLLS()
     S = set()
+    if nodes.lower() == '__all__':
+        nodes = list(OLLS)
+    elif nodes.lower() == '__ocll__':
+        nodes = ['Solved', 'Sune', 'Antisune', 'Chameleon', 'Headlights', 'Pi', 'Flip']
     for node in nodes:
-        P = Alg(OLLS[node][0])
+        P = Alg(OLLS[node][0]) if not node == 'Solved' else Alg('')
         P.inv()(r)
         for j in range(4):
             I = r.identify()
@@ -1277,9 +1369,90 @@ def make_graph_move(move, nodes):
                     S.add(r.identify())
                     A(r)
                 S.add(I)
-            Alg("U'")(r)
+            Alg("U")(r)
         P(r)
         assert r.identify()[0] in ('OCLL', 'Solved')
+
+def find_simple_OLL():
+    OLLS, sy = readOLLS()
+    from collections import defaultdict
+    M = defaultdict(list)
+    levels = {}
+    M['Solved'] = []
+    Bases = ('Suit Up', 'P', 'Breakneck', 'Ant', 'Tying', 'Untying',
+             'Sune', 'Antisune', 'Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square')
+    
+    Excludes = ("Flip", "Chameleon",
+                "Headlights", "Gun", "Anti-Couch" , "Zamboni" , "Pi" , "Mummy",
+                "Anti-Lightning", "Frying Pan", "Crown" , "Anti-Frying Pan" , "Kite",
+                "Moustache", "Lefty Square", "Slash" , "Upstairs" , "Nazi" , "Downstairs",
+                "Anti-Kite", "Anti-Nazi", "Spotted Chameleon" , "Lightning" , "Arrow",
+                "Righty Square", "Streetlights", )
+    
+    for b in Bases:
+        M[b] = []
+    r = Rubik()
+    Small = Alg("F R U R' U' F'")
+    Big   = Alg("f R U R' U' f'")
+    Small2 = Alg("F (R U R' U')2 F'")
+    Big2   = Alg("f (R U R' U')2 f'")
+    
+    import itertools
+    for n in range(3):
+        mod = False
+        newM = defaultdict(list)
+        for Aname, Aval in (('Small', Small), ('Big', Big)):
+            for node in OLLS:
+                if node in M:
+                    continue
+                P = Alg(OLLS[node][0])
+                P.inv()(r)
+                for j in range(4):
+                    Aval(r)
+                    I = r.identify()
+                    assert I[0] in ('OCLL', 'Solved', 'OLL')
+                    if I[1] in M:
+                        newM[node].append((j, Aname, I[1], I[2]))
+                        levels[node] = n
+                        mod = True
+                    Aval.inv()(r)
+                    r.apply('U')
+                P(r)
+        if not mod:
+            break
+        for k,l in newM.items():
+            M[k].extend(l)
+        # print(n, '\n' + '\n'.join(map(str,sorted(dict(M).items()))))
+    
+    def node_chain(v):
+        for x in M[v]:
+            yield x[1]
+            yield from node_chain(x[1])
+            break
+    
+    for L in M.values():
+        pass # del L[1:]
+    
+    from functools import partial
+    with open('Simple-Olls-Much-Much-Much-Sune-1-all.dot', 'w') as file:
+        print('digraph {', file=file)
+        print('rankdir=LR;', file=file)
+        for k,L in sorted(M.items()):
+            if k in Excludes:
+                continue
+            for i,(n,f,k2,n2) in enumerate(L):
+                show_all = k2 in ('Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square') # False # k2 in Bases # i == 0
+                if show_all:
+                    print('"{}" -> "{}" [label="{}-{}-{}"]'.format(k, k2, n,f,n2), file=file)
+                else:
+                    print('"{}" -> "{} ({})" [label="{}-{}-{}"]'.format(k, k2,k, n,f,n2), file=file)
+                    print('"{0} ({1})" [label="{0}"]'.format(k2,k), file=file)
+        
+        for k,l in levels.items():
+            if k in Excludes:
+                continue
+            print('"Level {}" -> "{}"'.format(l, k), file=file)
+        print('}', file=file)
 
 if __name__ == '__main__':
     main()
