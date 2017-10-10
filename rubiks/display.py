@@ -1093,15 +1093,13 @@ def test_OLLS_rot():
     OLLS, sy = readOLLS()
     cub = Rubik()
     for name, list_of_alg in OLLS.items():
-        for algo in list_of_alg[0:1]:
+        for algo in list_of_alg:
             try:
                 Alg(algo).inv(cub)
             except:
                 print("Cannot apply", alg.inv(algo))
                 cub = Rubik()
                 continue
-            print(name, cub.identify())
-            show(cub)
             
             id = cub.identify()
             assert id[1] == name, "{} != {}".format(id[1], name)
