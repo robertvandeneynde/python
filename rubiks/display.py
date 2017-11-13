@@ -732,8 +732,160 @@ class Rubik:
                     
         return ('OCLL' if OCLL else 'OLL'), answer[0], answer[1]
     
+    def identifyPLL(self):
+        
+        def inv(a,b):
+            return (a + 3) % 6 == b
+        
+        """
+        data = [
+            ("H",  "GBGROR"),
+            ("Ua", "GOGRRR"),
+            ("Ub", "GBRRR"), 
+            ("Z",  "GRGRGR"),
+            ("Aa", "RGBORR"),
+            ("Ab", "BGOGRG"),
+            ("E",  "OGRBRG"),
+            ("F",  "OBGRRR"),
+            ("Ga", "GGRBOB"),
+            ("Gb", "GGBOBG"),
+            ("Gc", "BROGOG"),
+            ("Gd", "RORBGO"),
+            ("Ja", "GGGRBB"),
+            ("Jb", "RROGGR"),
+            ("Na", "BBGRRO"),
+            ("Nb", "GBBORR"),
+            ("Ra", "GORBRG"),
+            ("Rb", "ORGRGR"),
+            ("T",  "RBOGRR"),
+            ("V",  "GOBORR"),
+            ("Y",  "GGBORR"),
+        ]
+        data_map = dict((y,x) for x,y in data)
+        
+        """
+        C = lambda POS, DIR: self.cubAt(POS).colorIdAt(DIR)
+        
+        OX, OY, OZ = (1,0,0), (0,1,0), (0,0,1)
+        mOX, mOY, mOZ = (-1,0,0), (0,-1,0), (0,0,-1)
+        
+        """
+        colors_map = {
+            C(OZ, OZ): "R", C(mOZ, mOZ): "O",
+            C(OX, OX): "G", C(mOX, mOX): "B",
+            C(OY, OY): "Y", C(mOY, mOY): "W",
+        }
+        """
+        
+        answer = None
+        def try_answer(x, y, symmetry=None):
+            nonlocal answer
+            if False:
+                if answer is not None:
+                    if answer[0] == x:
+                        if symmetry is not None and (answer[1] - symmetry) % 4 == y:
+                            pass # OK
+                        else:
+                            print('DOUBLE', answer, 'VS', x, y)
+                    else:
+                        print('DOUBLE', answer, 'VS', x, y)
+            answer = x, y
+            
+        for i in (3,2,1,0):
+            self.apply("U'")
+            a,b,c,d,e,f = (
+                self.cubAt((x,1,z)).colorIdAt(DIR)
+                for (x,z), DIR in zip(
+                    ((1,-1), (1,0), (1,1), (1,1), (0,1), (-1,1)),
+                    (OX, OX, OX, OZ, OZ, OZ)
+                )
+            )
+            
+            if a == c and d == e == f and inv(b,d):
+                try_answer('Ua', i)
+            if a == c and d == e == f and inv(a,b):
+                try_answer('Ub', i)
+            if a == c == e and b == d == f:
+                try_answer('Z', i)
+            if a == e == f and inv(a,d) and inv(b,c):
+                try_answer('Aa', i)
+            if b == d == f and inv(a,b) and inv(c,e):
+                try_answer('Ab', i)
+            if b == f and c == e and inv(a,c) and inv(b,d):
+                try_answer('E', i)
+            if d == e == f and inv(a,d) and inv(b,c):
+                try_answer('F', i)
+            if a == b and d == f and inv(a,d) and inv(c,e):
+                try_answer('Ga', i)
+            if a == b == f and c == e and inv(a,c):
+                try_answer('Gb', i)
+            if c == e and d == f and inv(a,d) and inv(b,c):
+                try_answer('Gc', i)
+            if a == c and b == f and inv(a,b) and inv(d, e):
+                try_answer('Gd', i)
+            if a == b == c and e == f and inv(a,f):
+                try_answer('Ja', i)
+            if a == b == f and d == e and inv(b,c):
+                try_answer('Jb', i)
+            if a == b and d == e and inv(b,c) and inv(e,f):
+                try_answer('Na', i)
+            if b == c and e == f and inv(a,b) and inv(d, e):
+                try_answer('Nb', i)
+            if a == f and c == e and inv(a,d) and inv(b,c):
+                try_answer('Ra', i)
+            if b == d == f and c == e and inv(a,b):
+                try_answer('Rb', i)
+            if a == e == f and inv(a,c) and inv(b,d):
+                try_answer('T', i)
+            if b == d and e == f and inv(a,c) and inv(d,e):
+                try_answer('V', i)
+            if a == b and e == f and inv(b,c) and inv(d,e):
+                try_answer('Y', i)
+            if a == b == c and d == e == f:
+                try_answer('I', i, symmetry=1)
+            
+        return answer
+    
     def apply(self, alg):
         Alg(alg)(self)
+        
+def test_PLL():
+    # do rotation test
+    pass
+
+def find_PLL():
+    OLLS, sy = readOLLS()
+    
+    r = Rubik()
+    for alg_base in [
+        " F R U R' U' F' ",
+        " f R U R' U' f' ",
+        " F (R U R' U')2 F' ",
+        " f (R U R' U')2 f' ",
+        " R U R' U' R' F R F' ",
+        " R U2 R' U' R U' R' ", 
+        " r U2 R' U' R U' r' ", 
+        " R U R' U R U2 R' ", 
+        " r U R' U R U2 r' ", 
+        " R2 D' R U' R' D R U R ",
+    ]:
+        r.apply(alg_base) 
+        
+        _, t, n = r.identify()
+        r.apply("U" * n)
+        
+        for algo in OLLS[t]:
+            r.apply(algo)
+            I = r.identify()
+            if I[1] == 'Solved':
+                pllT, pllN = r.identifyPLL()
+                if pllT != 'I':
+                    print(pllT, alg_base, ('' if n == 0 else "U" if n == 1 else "U2" if n == 2 else "U'"), algo, sep='\t')
+            # show(r)
+            r.apply(alg.inv(algo))
+        
+        r.apply("U'" * n)
+        r.apply(alg.inv(alg_base))
     
 def creer_vao_rubiks(shader, rubik):
     all_colors = [quad.color for cub in rubik.cubes for quad in cub.quads for point in quad.points]

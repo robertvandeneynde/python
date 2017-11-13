@@ -11,7 +11,8 @@ from collections import *
 from fractions import Fraction
 from fractions import Fraction as F
 from datetime import date, time, datetime, timedelta
-import html
+if sys.version_info[0] >= 3:
+    import html
 import random
 from random import randint, randrange, shuffle, choice
 import argparse
@@ -27,7 +28,7 @@ ops = {
     '//': operator.floordiv,
     '*': operator.mul,
     '%': operator.mod,
-    '@': operator.matmul,
+    '@': getattr(operator, 'matmul', operator.mul),
     '&': operator.and_,
     '^': operator.xor,
     '~': operator.invert,
