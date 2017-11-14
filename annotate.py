@@ -21,6 +21,7 @@ p.add_argument('--ignore-empty', action='store_true', help='do not output empty 
 p.add_argument('--boolean', action='store_true', help='ask false (with keyboard F) true (with J)')
 p.add_argument('--width', type=int, default=800)
 p.add_argument('--height', type=int, default=800)
+p.add_argument('--rotate', type=int, choices=[0,90,180,270,-90,-180,-270], default=0)
 
 g = p.add_mutually_exclusive_group()
 g.add_argument('--from-file', help='take list of files from first column in csv file (in dir)')
@@ -101,6 +102,7 @@ def to_p1p2(R:'x,y,w,h'):
 def refresh_image():
     global image, photo
     image = (image_base
+        .rotate(args.rotate)
         .resize(tuple(map(int, (image_base.width * zoom_factor, image_base.height * zoom_factor) )))
         .crop( to_p1p2((int(pos_image[0] * zoom_factor), int(pos_image[1] * zoom_factor), WIDTH,HEIGHT)) )
     )
