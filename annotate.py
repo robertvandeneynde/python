@@ -9,25 +9,30 @@ from fractions import Fraction
 import argparse, re, os, sys
 from datetime import date, time, datetime, timedelta
 from collections import namedtuple
+import csv
 
 assert sys.version_info[0] > 2, "python 3 !"
 
 p = argparse.ArgumentParser()
 p.add_argument('--dir', default='.')
 p.add_argument('-o', '--out', default='annotate.csv')
-p.add_argument('--append', action='store_true', help='append entries to csv')
-p.add_argument('--header', action='store_true', help='insert header with date')
-p.add_argument('--ignore-empty', action='store_true', help='do not output empty values')
-p.add_argument('--boolean', action='store_true', help='ask false (with keyboard F) true (with J)')
+p.add_argument('--append', action='store_true', help='Append entries to csv')
+p.add_argument('--header', action='store_true', help='Insert header with date')
+p.add_argument('--ignore-empty', action='store_true', help='Do not output empty values')
+
+p.add_argument('--boolean', action='store_true', help='Ask True (with keyboard J) or False (with keyboard F)')
+p.add_argument('--true', action='store_true', help='What to write when True (J) (Right)', default='True')
+p.add_argument('--false', action='store_true', help='What to write when False (F) (Left)', default='False')
+
 p.add_argument('--width', type=int, default=800)
 p.add_argument('--height', type=int, default=800)
-p.add_argument('--rotate', type=int, choices=[0,90,180,270,-90,-180,-270], default=0)
+p.add_argument('--rotate', type=int, choices=[0,90,180,270,-90,-180,-270], default=0, help='rotate all images by x degrees')
 
 g = p.add_mutually_exclusive_group()
-g.add_argument('--from-file', help='take list of files from first column in csv file (in dir)')
-g.add_argument('--ignore-file', help='take list of files that are NOT in first column in csv file (in dir)')
+g.add_argument('--from-file', help='Take list of files from first column in csv file (in dir)')
+g.add_argument('--ignore-file', help='Take list of files that are NOT in first column in csv file (in dir)')
 
-p.add_argument('--continue', action='store_true', help='continue previous work (ignore files in annotate.csv)')
+p.add_argument('--continue', action='store_true', help='Continue previous work (ignore files in annotate.csv and append to it)')
 
 a = args = p.parse_args()
 
@@ -36,6 +41,10 @@ if getattr(a, 'continue'):
     a.append = True
 
 def key_natural_sort(filename):
+    """
+    'File 28 Page 2' → ['File ', 28, ' Page ', 2]
+    sorted(['1.png', '2.png', '3.png', '10.png', '20.png'], key=key_natural_sort) == ['1.png', '2.png', '3.png', '10.png', '20.png']
+    """
     return [
         x if x else int(y)
         for x,y in re.compile('([^\\d]+)|(\\d+)').findall(filename)
@@ -43,10 +52,10 @@ def key_natural_sort(filename):
 
 def read_file_names(filename):
     ''' return first column of file <filename> '''
-    with open(filename) as f: # should use import csv
+    with open(filename) as f:
+        reader = csv.reader(f, delimiter=';')
         L = []
-        for line in (l.strip('\n') for l in f):
-            data = line.split(';')
+        for data in reader:
             if data:
                 L.append(data[0])
         return L
@@ -83,12 +92,14 @@ if args.append:
 else:
     if os.path.exists(args.out):
         os.rename(args.out, args.out + datetime.now().strftime('.%Y-%m-%dT%Hh%S~'))
-    opened_csv = open(args.out, 'w') # 'a'
+    opened_csv = open(args.out, 'w')
+opened_csv_writer = csv.writer(opened_csv, delimiter=';')
 
 if args.header:
-    opened_csv.write("{}\n".format(";".join([
+    opened_csv_writer.writerow([
         datetime.now().strftime('-- %Y-%m-%dT%Hh%S --')
-    ]))) # # should use import csv
+    ])
+    opened_csv.flush()
     
 root = Tk()
 root.title("Annotate")
@@ -148,7 +159,7 @@ def changeImage(direction, boolean=None):
     global file_index, image_base
     
     if args.boolean:
-        output_variable = 'True' if boolean else 'False'
+        output_variable = args.true if boolean else args.false
         output_line = True
     else:
         output_variable = text_variable.get().strip()
@@ -158,10 +169,11 @@ def changeImage(direction, boolean=None):
             output_line = True 
     
     if output_line:
-        opened_csv.write("{}\n".format(';'.join([
+        opened_csv_writer.writerow([
             files[file_index].name,
             output_variable,
-        ]))) # # should use import csv
+        ])
+        opened_csv.flush()
     
     if file_index + direction >= len(files):
         opened_csv.close()
