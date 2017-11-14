@@ -5,7 +5,7 @@ import sys, json
 import argparse
 p = argparse.ArgumentParser()
 p.add_argument('files', nargs='+')
-p.add_argument('--names', action='store_true')
+p.add_argument('-n', '--names', action='store_true')
 a = p.parse_args()
 
 for n in a.files:
