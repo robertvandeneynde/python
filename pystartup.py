@@ -19,6 +19,7 @@ import argparse
 import unicodedata
 import re
 import json
+import csv
 
 import operator
 ops = {

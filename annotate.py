@@ -22,8 +22,10 @@ p.add_argument('--ignore-empty', action='store_true', help='Do not output empty 
 # p.add_argument('--check', action='store_true', help='Do not write anything, just check current annotations')
 
 p.add_argument('--boolean', action='store_true', help='Ask True (with keyboard J) or False (with keyboard F)')
-p.add_argument('--true', action='store_true', help='What to write when True (J) (Right)', default='True')
-p.add_argument('--false', action='store_true', help='What to write when False (F) (Left)', default='False')
+p.add_argument('--true', default='True', help='When --boolean, what to write when True (J) (Right)')
+p.add_argument('--false', default='False', help='When --boolean, what to write when False (F) (Left)')
+p.add_argument('--allow-empty', action='store_true', help='When --boolean, allow pressing ENTER to let empty (may be combined with --ignore-empty)')
+p.add_argument('--empty-value', default='', help='When --boolean and --allow-empty, what to write instead of the empty string when pressing ENTER')
 
 p.add_argument('--width', type=int, default=800)
 p.add_argument('--height', type=int, default=800)
@@ -62,7 +64,7 @@ def key_natural_sort(filename):
     ['1.png', '2.png', '3.png', '10.png', '20.png']
     """
     return [
-        x if x else int(y)
+        x if x else y.zfill(10) # int(y)
         for x,y in re.compile('([^\\d]+)|(\\d+)').findall(filename)
     ]
 
@@ -174,14 +176,14 @@ def changeImage(direction, boolean=None):
     global file_index, image_base
     
     if args.boolean:
-        output_variable = args.true if boolean else args.false
-        output_line = True
+        output_variable = args.true if boolean == True else args.false if boolean == False else args.empty_value
     else:
         output_variable = text_variable.get().strip()
-        if args.ignore_empty:
-            output_line = output_variable != ''
-        else:
-            output_line = True 
+        
+    if args.ignore_empty:
+        output_line = output_variable != ''
+    else:
+        output_line = True 
     
     if output_line:
         opened_csv_writer.writerow([
@@ -219,6 +221,8 @@ def onKeyDown(event):
             changeImage(+1, boolean=True)
         if event.keysym == 'f':
             changeImage(+1, boolean=False)
+        if args.allow_empty and is_enter:
+            changeImage(+1, boolean=None)
     # if event.state == 20 and event.keysym == 'Left':
     #     changeImage(-1)
 
@@ -236,7 +240,7 @@ def onRotate(direction):
 def onZoom(direction):
     global zoom_factor
     
-    zoom_factor *= Fraction('12/10') ** direction # (f *= 1.1) if d = +1 else (f /= 1.1) if d = -1 else (f *= 1.1 * 1.1) if d = +2 etc.
+    zoom_factor *= Fraction('1.1') ** direction # (f *= 1.1) if d = +1 else (f /= 1.1) if d = -1 else (f *= 1.1 * 1.1) if d = +2 etc.
     
     print('--zoom={}'.format(zoom_factor))
     

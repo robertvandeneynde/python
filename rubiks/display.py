@@ -189,9 +189,9 @@ def LookAtMatrix(*args):
     u = numpy.cross(s, f)
 
     return array([
-        [s[0], s[1], s[2], -s.dot(e)],
-        [u[0], u[1], u[2], -u.dot(e)],
-        [-f[0], -f[1], -f[2], f.dot(e)],
+        [s[0], s[1], s[2], -s(e)],
+        [u[0], u[1], u[2], -u(e)],
+        [-f[0], -f[1], -f[2], f(e)],
         [0, 0, 0, 1],
     ], dtype=numpy.float32)
     
@@ -1524,34 +1524,80 @@ def make_graph_move(move, nodes):
         assert r.identify()[0] in ('OCLL', 'Solved')
 
 def find_simple_OLL():
+    dirname = 'Simple-Olls'
+    filename = 'Fast-Sune'
+    include_images = False
+    
+    Bases = (
+        ('Suit Up', 'P') if filename in ('WSune-Small', 'Sune-Small', 'Long-Small') else 
+        ('Suit Up', 'P', 'Breakneck', 'Ant', 'Tying', 'Untying',) if filename == 'Fast-Simple' else
+        ('Suit Up', 'P', 'Sune', 'Antisune', 'Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square') if filename == 'Fast-Sune' else
+        ()
+    )
+    
+    Excludes = (()
+        + ("Flip", "Chameleon") * (filename == 'Fast-Sune' or filename == 'Fast-Simple' and not include_images)
+        + ("Headlights", "Gun", "Anti-Couch" , "Zamboni" , "Pi" , "Mummy",
+         "Anti-Lightning", "Frying Pan", "Crown" , "Anti-Frying Pan" , "Kite",
+         "Moustache", "Lefty Square", "Slash" , "Upstairs" , "Nazi" , "Downstairs",
+         "Anti-Kite", "Anti-Nazi", "Spotted Chameleon" , "Lightning" , "Arrow",
+         "Righty Square", "Streetlights", ) * (filename == 'Fast-Sune')
+        + () * (filename in ('WSune-Small', 'Sune-Small', 'Long-Small'))
+    )
+    
+    show_all = (
+        (lambda k2: k2 in ('Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square')) if filename == 'Fast-Sune' else
+        (lambda k2: k2 in Bases) if (filename == 'Fast-Simple' and not include_images) else
+        (lambda k2: False) # else lambda k2: i == 0
+    )
+    
+    MAX_LEVEL = (
+        0 if filename in ("WSune-Small", "Sune-Small", "Long-Small") else
+        3 if filename in ("Fast-Simple", "Fast-Sune") else
+        10
+    )
+    
+    Moves = list(zip(
+        ("WSune", "WAntisune", "WMySune", "WMyAntiSune") if filename == "WSune-Small" else
+        ("Sune", "Antisune", "MySune", "MyAntiSune") if filename == "Sune-Small" else
+        ("Breakneck", "Ant", "Tying", "Untying") if filename == "Long-Small" else
+        ("Small", "Big") if filename in ("Fast-Simple", "Fast-Sune") else
+        ()
+        ,
+        map(Alg,
+            ("rUR'URU2r'", "l'U'LU'L'U2l", "rU2R'U'RU'r'", "l'U2LUL'Ul") if filename == 'WSune-Small' else
+            ("RUR'URU2R'", "L'U'LU'L'U2L", "RU2R'U'RU'R'", "L'U2LUL'UL") if filename == 'Sune-Small' else
+            ("F (RUR'U')2 F'", "f (RUR'U')2 f'", "RUR'U' R'FRF'", " F RU'R'U' RUR'F'") if filename == 'Long-Small' else
+            ("F RUR'U' F'", "f RUR'U' f'") if filename in ('Fast-Simple', 'Fast-Sune') else
+            ()
+        ),
+    ))
+        
+    Excludes += tuple(M[0] for M in Moves)
+    
     OLLS, sy = readOLLS()
     from collections import defaultdict
     M = defaultdict(list)
     levels = {}
     M['Solved'] = []
-    Bases = ('Suit Up', 'P', 'Breakneck', 'Ant', 'Tying', 'Untying',
-             'Sune', 'Antisune', 'Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square')
-    
-    Excludes = ("Flip", "Chameleon",
-                "Headlights", "Gun", "Anti-Couch" , "Zamboni" , "Pi" , "Mummy",
-                "Anti-Lightning", "Frying Pan", "Crown" , "Anti-Frying Pan" , "Kite",
-                "Moustache", "Lefty Square", "Slash" , "Upstairs" , "Nazi" , "Downstairs",
-                "Anti-Kite", "Anti-Nazi", "Spotted Chameleon" , "Lightning" , "Arrow",
-                "Righty Square", "Streetlights", )
     
     for b in Bases:
         M[b] = []
     r = Rubik()
-    Small = Alg("F R U R' U' F'")
-    Big   = Alg("f R U R' U' f'")
-    Small2 = Alg("F (R U R' U')2 F'")
-    Big2   = Alg("f (R U R' U')2 f'")
+    
+    import re
+    R = re.compile('OLL(\d+)')
+    OLLNumbers = {
+        k: next(R.match(m).group(1) for m in sy[k] if R.match(m))
+        for k in sy
+    }
+    OLLNumbers['Solved'] = '0'
     
     import itertools
-    for n in range(3):
+    for n in range(MAX_LEVEL+1):
         mod = False
         newM = defaultdict(list)
-        for Aname, Aval in (('Small', Small), ('Big', Big)):
+        for Aname, Aval in Moves:
             for node in OLLS:
                 if node in M:
                     continue
@@ -1583,19 +1629,31 @@ def find_simple_OLL():
     for L in M.values():
         pass # del L[1:]
     
+    def label_img(node1, a,t,b, node2):
+        if not include_images:
+            return '"{}-{}-{}"'.format(a,t,b)
+        knode1, knode2 = OLLNumbers[node1], OLLNumbers[node2]
+        return '<<table border="0"><tr> <td>{}</td> <td><img src="images/O{}U{}.gif"/></td> <td>{}</td> <td><img src="images/O{}U{}.gif"/></td> <td>{}</td> </tr></table>>'.format(
+            'U'+str(a), knode1, (4 - a) % 4, t, knode2, (4-b)%4, 'U'+str(b))
+    
     from functools import partial
-    with open('Simple-Olls-Much-Much-Much-Sune-1-all.dot', 'w') as file:
+    import os
+    realfilename = os.path.join(dirname, (filename if include_images else filename + '-noimage') + '.dot')
+    with open(realfilename, 'w') as file:
         print('digraph {', file=file)
         print('rankdir=LR;', file=file)
         for k,L in sorted(M.items()):
             if k in Excludes:
                 continue
+            # if k not in levels:
+            #     continue
+            # if levels[k] > 0:
+            #     continue
             for i,(n,f,k2,n2) in enumerate(L):
-                show_all = k2 in ('Lightning', 'Anti-Lightning', 'Lefty Square', 'Righty Square') # False # k2 in Bases # i == 0
-                if show_all:
-                    print('"{}" -> "{}" [label="{}-{}-{}"]'.format(k, k2, n,f,n2), file=file)
+                if show_all(k2):
+                    print('"{}" -> "{}" [label={}]'.format(k, k2, label_img(k, n,f,n2, k2)), file=file)
                 else:
-                    print('"{}" -> "{} ({})" [label="{}-{}-{}"]'.format(k, k2,k, n,f,n2), file=file)
+                    print('"{}" -> "{} ({})" [label={}]'.format(k, k2,k, label_img(k, n,f,n2, k2)), file=file)
                     print('"{0} ({1})" [label="{0}"]'.format(k2,k), file=file)
         
         for k,l in levels.items():
@@ -1603,6 +1661,7 @@ def find_simple_OLL():
                 continue
             print('"Level {}" -> "{}"'.format(l, k), file=file)
         print('}', file=file)
+    print('Written ' + realfilename)
 
 if __name__ == '__main__':
-    main()
+    find_simple_OLL() # main()
