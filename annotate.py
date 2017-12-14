@@ -137,7 +137,7 @@ if args.header:
 root = Tk()
 root.title("Annotate")
 
-WIDTH, HEIGHT = args.width, args.height
+root.geometry("{}x{}+{}+{}".format(args.width, args.height, 0, 0))
 
 def to_p1p2(R:'x,y,w,h'):
     x,y,w,h = R
@@ -148,10 +148,14 @@ def refresh_image():
     image = (image_base
         .rotate(rotate_angle)
         .resize(tuple(map(int, (image_base.width * zoom_factor, image_base.height * zoom_factor) )))
-        .crop( to_p1p2((int(pos_image[0] * zoom_factor), int(pos_image[1] * zoom_factor), WIDTH,HEIGHT)) )
     )
+    # image = image.crop( to_p1p2((int(pos_image[0] * zoom_factor), int(pos_image[1] * zoom_factor), image.width,image.height)) )
+    # image = image.crop( to_p1p2((0, 0, image.width,image.height)) )
+    
     photo = ImageTk.PhotoImage(image)
-    label.config(image=photo)
+    label.delete(ALL)
+    label.create_image((int(- pos_image[0] * zoom_factor) + image.width//2, int(- pos_image[1] * zoom_factor) + image.height//2),image=photo)
+    # label.config(image=photo)
 
 def onMouseDown(event):
     global drag_point
@@ -294,7 +298,7 @@ zoom_factor = args.zoom
 rotate_angle = args.rotate
 drag_point = None
 
-label = ttk.Label(mainframe) # image=photo
+label = Canvas(mainframe) # image=photo
 label.pack(fill=BOTH, expand=True) # column=0, row=0)
 
 refresh_image()
@@ -320,14 +324,11 @@ for child in mainframe.winfo_children():
 
 if not args.boolean:
     text_variable_entry.focus()
-# root.bind('<Return>', calculate)
-
-# def onResize(event):
-    # global WIDTH, HEIGHT
-    # WIDTH = event.width
-    # HEIGHT = max(0, event.height - 50)
-    # refresh_image()
-
-# root.bind('<Configure>', onResize)
+    
+def onResize(event):
+    print('--width={} --height={}'.format(event.width, event.height))
+    # event.x event.y event.x_root event.y_root
+    
+root.bind("<Configure>", onResize)
 
 root.mainloop()
