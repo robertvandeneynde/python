@@ -14,9 +14,10 @@ import csv
 assert sys.version_info[0] > 2, "python 3 !"
 
 p = argparse.ArgumentParser()
-p.add_argument('--dir', default='.')
+p.add_argument('files', nargs='*', help='files to annotate')
+p.add_argument('--dir', default='.', help='files to read if neither files nor --from-files is given')
 p.add_argument('-o', '--out', default='annotate.csv')
-p.add_argument('--append', action='store_true', help='Append entries to csv')
+p.add_argument('--append', action='store_true', default=None, help='Append entries to csv')
 p.add_argument('--header', action='store_true', help='Insert header with date')
 p.add_argument('--ignore-empty', action='store_true', help='Do not output empty values')
 # p.add_argument('--check', action='store_true', help='Do not write anything, just check current annotations')
@@ -34,9 +35,8 @@ p.add_argument('--pos-x', type=int, default=0)
 p.add_argument('--pos-y', type=int, default=0)
 p.add_argument('--zoom', type=Fraction, default=1)
 
-g = p.add_mutually_exclusive_group()
-g.add_argument('--from-file', help='Take list of files from first column in from-file csv file (in dir)')
-g.add_argument('--ignore-file', help='Take list of files that are NOT in first column in ignore-file csv file (in dir)')
+p.add_argument('--from-file', help='Take list of files from first column in from-file csv file (in dir)')
+p.add_argument('--ignore-file', help='Take list of files that are NOT in first column in ignore-file csv file (in dir)')
 
 p.add_argument('--continue', action='store_true', help='Continue previous work (ignore files in annotate.csv and append to it)')
 p.add_argument('--new-column', action='store_true', help='Add new column in annotate.csv instead of creating new file. Order will be the one of annotate.csv, then normal order for the ones not present')
@@ -44,7 +44,7 @@ p.add_argument('--new-column', action='store_true', help='Add new column in anno
 a = args = p.parse_args()
 
 if getattr(a, 'continue'):
-    a.ignore_file = a.out
+    assert a.append in (None, True), '--continue implies --append'
     a.append = True
 
 if args.from_file:
@@ -55,13 +55,18 @@ if args.ignore_file:
 if args.new_column:
     raise ValueError('not implemented')
 
-def key_natural_sort(filename):
+try:
+    from natsort import natsort_keygen
+    key_natural_sort = natsort_keygen()
+except ImportError:
+  def key_natural_sort(filename):
     """
     >>> key_natural_sort('File 28 Page 2')
     ['File ', 28, ' Page ', 2]
     
     >>> sorted(['1.png', '2.png', '3.png', '10.png', '20.png'], key=key_natural_sort)
     ['1.png', '2.png', '3.png', '10.png', '20.png']
+    
     """
     return [
         x if x else y.zfill(10) # int(y)
@@ -73,10 +78,21 @@ def read_file_names(filename):
     with open(filename) as f:
         return [data[0] for data in csv.reader(f, dialect='excel') if data]
 
+file_names = []
+
+if args.files:
+    file_names += args.files
+
 if args.from_file:
-    file_names = read_file_names(args.from_file)
-else:
-    file_names = os.listdir(args.dir)
+    file_names += read_file_names(args.from_file)
+
+if file_names == []:
+    my_sort = lambda S: sorted(S, key=key_natural_sort)
+    
+    file_names += my_sort(
+        f if args.dir == '.' else
+        os.path.join(args.dir, f)
+        for f in os.listdir(args.dir))
     
 if args.ignore_file:
     if not os.path.exists(args.ignore_file):
@@ -90,25 +106,19 @@ if args.ignore_file:
             except:
                 print('Warning, file ', l, 'does not exist to ignore')
 
-if args.new_column and os.path.exists(args.out):
+if os.path.exists(args.out) and (args.new_column or getattr(args, 'continue')):
     ignore_list = read_file_names(args.out)
     for l in ignore_list:
         try:
             file_names.remove(l)
         except:
             print('Warning, file ', l, 'does not exist to ignore')
-    ... # TODO: new_column
+    if args.new_column:
+        ... # TODO: new_column
 
-FileInfo = namedtuple('FileInfo', ('path', 'name'))
-
-files = sorted(
-    [FileInfo(f,f) if args.dir == '.' else
-     FileInfo(os.path.join(args.dir, f), f)
-     for f in file_names
-     if f.lower().endswith('.png')
-     or f.lower().endswith('.jpg')],
-    key=lambda fi: key_natural_sort(fi.name)
-)
+files = [f for f in file_names
+         if f.lower().endswith('.png')
+         or f.lower().endswith('.jpg')]
 
 if args.append:
     opened_csv = open(args.out, 'a')
@@ -187,7 +197,7 @@ def changeImage(direction, boolean=None):
     
     if output_line:
         opened_csv_writer.writerow([
-            files[file_index].name,
+            files[file_index],
             output_variable,
         ])
         opened_csv.flush()
@@ -197,8 +207,8 @@ def changeImage(direction, boolean=None):
         root.quit()
     else:
         file_index = max(0, file_index + direction)
-        image_base = Image.open(files[file_index].path)
-        infovariable.set("{} ({}/{})".format(files[file_index].name, 1+file_index, len(files)))
+        image_base = Image.open(files[file_index])
+        infovariable.set("{} ({}/{})".format(files[file_index], 1+file_index, len(files)))
         refresh_image()
     
     if not args.boolean:
@@ -276,8 +286,8 @@ widget.pack(side=BOTTOM, anchor=S) # (column=0, row=1, sticky=(W, E))
 # END GUI
 
 file_index = 0
-image_base = Image.open(files[file_index].path)
-infovariable.set("{} ({}/{})".format(files[file_index].name, 1+file_index, len(files)))
+image_base = Image.open(files[file_index])
+infovariable.set("{} ({}/{})".format(files[file_index], 1+file_index, len(files)))
 
 pos_image = args.pos_x, args.pos_y
 zoom_factor = args.zoom
