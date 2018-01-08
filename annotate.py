@@ -62,7 +62,7 @@ except ImportError:
   def key_natural_sort(filename):
     """
     >>> key_natural_sort('File 28 Page 2')
-    ['File ', 28, ' Page ', 2]
+    ['File ', '0000000028', ' Page ', '0000000002']
     
     >>> sorted(['1.png', '2.png', '3.png', '10.png', '20.png'], key=key_natural_sort)
     ['1.png', '2.png', '3.png', '10.png', '20.png']

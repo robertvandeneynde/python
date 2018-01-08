@@ -1,3 +1,5 @@
+import xlwt
+
 class MyWorksheet:
     def __init__(self, nameofsheet="Page 1", encoding='utf-8'):
         self.wb = xlwt.Workbook(encoding=encoding)

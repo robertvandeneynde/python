@@ -3,6 +3,7 @@ TODO : add wraps component to those concepts
 '''
 def _test():
 
+    # as decorator
     @infix
     def f(X,Y):
         return sum(x*y for x,y in zip(X,Y))
@@ -11,9 +12,39 @@ def _test():
 
     assert 32 == (1,2,3) |f| (4,5,6)
     assert 34 == 2 + (1,2,3) *f* (4,5,6)
+    
+    # fraction
+    from fractions import Fraction
+    frac = infix(Fraction)
 
-    # import numpy as np
-    # dot = infix(np.dot)
+    assert 1 == Fraction(1,3) * 3
+    assert 1 == (1 |frac| 3) * 3 # parenthesis
+    assert 1 == 1 /frac/ 3 * 3   # precedence
+    assert 1 |frac| 9 == 1 /frac/ 3 / 3 # precedence
+    assert 1 |frac| 9 == 1/frac/3 / 3   # other style
+
+    # numpy
+    try:
+        import numpy as np
+        dot = infix(np.dot)
+        cross = infix(np.cross)
+
+        assert 32 == (1,2,3) |dot| (4,5,6)
+        assert -2 == (1,2) |cross| (3,4)
+        assert all((0,0,-2) == (1,2,0) |cross| (3,4,0))
+        
+        # use correct symbol, for precedence.
+        # for |dot| or |cross|, "*" seems a good idea
+        assert 2 + (1,2,3) *dot* (4,5,6)
+        
+        vec_eq = infix(lambda A,B: all(A == B))
+        assert (5,7,9) |vec_eq| (1,2,3) + (4,5,6)
+        assert (0,0,-2) |vec_eq| (1,2,0) *cross* (3,4,0) # beware precedence
+
+        if sys.version_info >= (3,5):
+            matmul = operator.matmul
+    except ImportError:
+        pass # numpy is not installed, that's alright
 
     as_s = prefix(str)
     to_s = postfix(str)
@@ -64,19 +95,21 @@ class base:
 
 class infix(base):
     '''
-    @infix
+    @infix # as decorator
     def f(X,Y):
         return sum(x*y for x,y in zip(X,Y))
     
-    dot = infix(np.dot)
-    
-    r = f((1,2,3), (4,5,6))
+    r = f((1,2,3), (4,5,6)) # simple call
+    r = (1,2,3) |f| (4,5,6) # infix call
 
-    r = (1,2,3) |f| (4,5,6)
-    r = 2 + (1,2,3) *f* (4,5,6)
-    r = (1,2,3) |infix(np.dot)| (4,5,6)
+    r = 2 + (1,2,3) *f* (4,5,6)   # use * for precedence
+    
+    dot = infix(np.dot) # from existing function
+    r = 2 + (1,2,3) *dot* (4,5,6) # clear syntax
+
+    r = (1,2,3) |infix(np.dot)| (4,5,6) # one liner
     I = infix
-    r = (1,2,3) |I(np.dot)| (4,5,6)
+    r = (1,2,3) |I(np.dot)| (4,5,6) # other style
     
     beware, ** is RTL
     '''
@@ -120,7 +153,7 @@ def opmethod(method):
         def __init__(self, p):
             self.p = p
     a = A(8)
-    m = a.f(1)
+    m = a.f(1)  # simple call
     m = a.f | 1 # use postfixmethod
     m = 1 | a.f # use prefixmethod
     # NOT : a |f| 1 (calls function f) @see infixmethod

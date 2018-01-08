@@ -7,14 +7,15 @@ from math import sin,cos,degrees,radians,tan
 import numpy
 from numpy import array, matrix, linalg
 
-vertices = numpy.array(vertices, dtype=numpy.float32)
+def farray(*args):
+    return numpy.array(*args, dtype=numpy.float32)
 
-class Axe:
+class Axis:
     pass
 
-Axe.X = 0
-Axe.Y = 1
-Axe.Z = 2
+Axis.X = 0
+Axis.Y = 1
+Axis.Z = 2
 
 def polar(*args):
     if len(args) == 2: r,t = args
@@ -133,7 +134,7 @@ def LookAtMatrix(*args):
         TranslationMatrix(-e)
     )
 
-def AxeRotationMatrix(angle, axe=Axe.Z):
+def AxeRotationMatrix(angle, axe=Axis.Z):
     if angle % 90 == 0:
         x = angle % 360
         c = 1 if x == 0 else -1 if x == 180 else 0

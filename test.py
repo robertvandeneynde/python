@@ -18,4 +18,8 @@ def fonction():
     return a
 
 def new():
-    print(1) 
+    print(1)
+
+import sys, os
+print(os.getcwd())
+print(sys.argv[0])
