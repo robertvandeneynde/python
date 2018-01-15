@@ -6,12 +6,20 @@ from PIL import ImageTk, Image
 from pprint import pprint
 from fractions import Fraction
 
-import argparse, re, os, sys
+import argparse
+import re
+import os
+import sys
 from datetime import date, time, datetime, timedelta
 from collections import namedtuple
 import csv
 
 assert sys.version_info[0] > 2, "python 3 !"
+
+# from tkinter.filedialog import askopenfilename
+# askopenfilename()
+
+from tkinter.simpledialog import messagebox as tkbox
 
 p = argparse.ArgumentParser()
 p.add_argument('files', nargs='*', help='files to annotate')
@@ -41,7 +49,13 @@ p.add_argument('--ignore-file', help='Take list of files that are NOT in first c
 p.add_argument('--continue', action='store_true', help='Continue previous work (ignore files in annotate.csv and append to it)')
 p.add_argument('--new-column', action='store_true', help='Add new column in annotate.csv instead of creating new file. Order will be the one of annotate.csv, then normal order for the ones not present')
 
+p.add_argument('--excel-dialect', help='Choose dialect of Excel based on language.', default='fr')
+p.add_argument('--win-no-cd', action='store_true', help='On windows, the current working directory is guessed from argv[0] (right click behaviour). Write this for not doing that.')
+
 a = args = p.parse_args()
+
+if os.name == 'nt' and not args.win_no_cd:
+    os.chdir(os.path.dirname(sys.argv[0]) or '.') # we right clicked on the file, so cd into the directory of the file
 
 if getattr(a, 'continue'):
     assert a.append in (None, True), '--continue implies --append'
@@ -54,6 +68,13 @@ if args.ignore_file:
 
 if args.new_column:
     raise ValueError('not implemented')
+
+# csv handling
+class excel_french(csv.excel):
+    delimiter = ';'
+
+csv.register_dialect('excel_loc', excel_french if args.excel_dialect == 'fr' else
+                                  csv.excel)
 
 try:
     from natsort import natsort_keygen
@@ -75,8 +96,8 @@ except ImportError:
 
 def read_file_names(filename):
     ''' return first column of file <filename> '''
-    with open(filename) as f:
-        return [data[0] for data in csv.reader(f, dialect='excel') if data]
+    with open(filename, newline='') as f:
+        return [data[0] for data in csv.reader(f, dialect='excel_loc') if data]
 
 file_names = []
 
@@ -121,12 +142,16 @@ files = [f for f in file_names
          or f.lower().endswith('.jpg')]
 
 if args.append:
-    opened_csv = open(args.out, 'a')
+    opened_csv = open(args.out, 'a', newline='')
 else:
     if os.path.exists(args.out):
-        os.rename(args.out, args.out + datetime.now().strftime('.%Y-%m-%dT%Hh%S~'))
-    opened_csv = open(args.out, 'w')
-opened_csv_writer = csv.writer(opened_csv, dialect='excel')
+        try:
+            os.rename(args.out, args.out + datetime.now().strftime('.%Y-%m-%dT%Hh%S~'))
+        except Exception as e:
+            tkbox.showwarning('Error', str(e))
+            raise e
+    opened_csv = open(args.out, 'w', newline='')
+opened_csv_writer = csv.writer(opened_csv, dialect='excel_loc')
 
 if args.header:
     opened_csv_writer.writerow([
@@ -332,3 +357,7 @@ def onResize(event):
 root.bind("<Configure>", onResize)
 
 root.mainloop()
+
+# import os
+# print(sys.version_info)
+# os.system("pause")
