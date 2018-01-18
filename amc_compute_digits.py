@@ -37,33 +37,18 @@ with open(FILENAME) as f:
 if not csvMatrix:
     print('Empty csv')
     sys.exit(1)
-    
-## BEGIN natsort ##
-try:
-    from natsort import natsort_keygen
-    key_natural_sort = natsort_keygen()
-except ImportError:
-  def key_natural_sort(filename):
-    """
-    >>> key_natural_sort('File 28 Page 2')
-    ['File ', '0000000028', ' Page ', '0000000002']
-    
-    >>> sorted(['1.png', '2.png', '3.png', '10.png', '20.png'], key=key_natural_sort)
-    ['1.png', '2.png', '3.png', '10.png', '20.png']
-    
-    """
-    return [
-        x if x else y.zfill(10) # int(y)
-        for x,y in re.compile('([^\\d]+)|(\\d+)').findall(filename)
-    ]
-## END natsort ##
 
-MANDATORY_COLUMNS = {'Exam', 'A:Matricule', 'Name', 'Mark', 'zmatr'} | {'zmatr[{}]'.format(i) for i in (1,2,3,4,5,6)}
-FIELDS = set(csvMatrix[0].keys()) # DictReader enforces that all(l.keys() == FIELDS for l in csvMatrix)
+FIELDS = list(csvMatrix[0].keys()) # DictReader enforces that all(l.keys() == FIELDS for l in csvMatrix)
 
-assert MANDATORY_COLUMNS <= FIELDS, "Missing columns: {}".format(MANDATORY_COLUMNS - FIELDS)
+ClosedQuestionsTicked = [f for f in FIELDS if f.startswith('TICKED:QF')]
 
-Questions = {f for f in FIELDS - MANDATORY_COLUMNS if not f.startswith('TICKED:')}
+assert all(c.endswith('digits') or c.endswith('exp') for c in ClosedQuestionsTicked)
+for a,b in (('digits', 'exp'), ('exp', 'digits')):
+    assert all(c[:-len(a)] + b in ClosedQuestionsTicked
+               for c in ClosedQuestionsTicked
+               if c.endswith(a))
+
+ClosedQuestions = [c[len('TICKED:'):-len('digits')] for c in ClosedQuestionsTicked if c.endswith('digits')]
 
 class EmptyColumn(Exception):
     pass
@@ -129,17 +114,6 @@ def parseQF(csvLine:list, name:'QF1b', *, base=10, policies=POLICIES):
     
     return {'value': numberFinal, 'mantissa':number, 'exp':numberExp, 'sign': 0 if numberFinal == 0 else -1 if numberFinal < 0 else 1}
 
-ClosedQuestionsColumns = {q for q in Questions if q.startswith('QF')}
-OpenedQuestionsColumns = Questions - ClosedQuestionsColumns
-
-assert all(c.endswith('digits') or c.endswith('exp') for c in ClosedQuestionsColumns)
-for a,b in (('digits', 'exp'), ('exp', 'digits')):
-    assert all(c[:-len(a)] + b in ClosedQuestionsColumns
-               for c in ClosedQuestionsColumns
-               if c.endswith(a))
-
-ClosedQuestions = {c[:-len('digits')] for c in ClosedQuestionsColumns if c.endswith('digits')}
-
 def parseFrenchNumber(string):
     """
     >>> parseFrenchNumber('1,5')
@@ -147,9 +121,11 @@ def parseFrenchNumber(string):
     """
     return float(string.replace(',', '.'))
 
+def looksLikeFrenchNumber(string):
+    return all(c in '0123456789,' for c in string)
+
 print('ClosedQuestions', ClosedQuestions)
 
-sorted_natsort = lambda X: sorted(X, key=key_natural_sort)
 flatten = lambda X: [y for x in X for y in x]
 
 QF_FIELDS = 'value mantissa exp sign'.split()
@@ -184,44 +160,54 @@ for USE_XL in (False, True):
             f.close()
 
     try:
-        writerow([
-            'Exam',
-            'A:Matricule',
-            'Name',
-            ] + flatten([
-                [q + ('_' + key) * (key != 'value') for key in QF_FIELDS]
-                for q in sorted_natsort(ClosedQuestions)
-            ]) + flatten([
-                [q, 'TICKED:' + q]
-                for q in sorted_natsort(OpenedQuestionsColumns)
-            ]))
+        writerow(flatten([
+            [k]
+            
+            if k not in ClosedQuestionsTicked else
+            
+            [q + ('_' + key) * (key != 'value') for key in QF_FIELDS]
+            
+            if k.endswith('digits') else
+            
+            []
+            
+            for k in FIELDS
+            for q in [
+                k[len('TICKED:'):-len('digits')] if k.endswith('digits') else
+                k[len('TICKED:'):-len('exp')]
+            ]
+        ]))
         
         for student in csvMatrix:
             
             answers = {}
             
-            for q in sorted_natsort(ClosedQuestions):
+            for q in ClosedQuestions:
                 try:
                     answers[q] = parseQF(student, q)
                 except Exception as e:
                     answers[q] = e
             
-            # pprint([student['A:Matricule'], 'has', answers])
-            
-            writerow([
-                student['Exam'],
-                student['A:Matricule'],
-                student['Name'],
-            ] + flatten([
-                [answers[q][key] for key in QF_FIELDS]
-                if not isinstance(answers[q], Exception) else
-                [str(answers[q].__class__.__name__)] * bool(QF_FIELDS) + ['NA'] * (len(QF_FIELDS) - 1)
+            writerow(flatten([
+                [parseFrenchNumber(student[k]) if looksLikeFrenchNumber(student[k]) else str(student[k]) ]
                 
-                for q in sorted_natsort(ClosedQuestions)
-            ]) + flatten([
-                [parseFrenchNumber(student[q]),
-                 student['TICKED:' + q]]
-                for q in sorted_natsort(OpenedQuestionsColumns)
+                if k not in ClosedQuestionsTicked else
+                
+                (
+                    [answers[q][key] for key in QF_FIELDS]
+                    if not isinstance(answers[q], Exception) else
+                    [str(answers[q].__class__.__name__)] * bool(QF_FIELDS) + ['NA'] * (len(QF_FIELDS) - 1)
+                )
+                
+                if k.endswith('digits') else
+                
+                []
+                
+                for k in FIELDS
+                for q in [
+                    k[len('TICKED:'):-len('digits')] if k.endswith('digits') else
+                    k[len('TICKED:'):-len('exp')]
+                ]
             ]))
     finally:
         close()
