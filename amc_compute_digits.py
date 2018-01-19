@@ -119,10 +119,13 @@ def parseFrenchNumber(string):
     >>> parseFrenchNumber('1,5')
     1.5
     """
-    return float(string.replace(',', '.'))
+    try:
+        return float(string.replace(',', '.'))
+    except:
+        return string
 
 def looksLikeFrenchNumber(string):
-    return all(c in '0123456789,' for c in string)
+    return string and all(c in '0123456789,' for c in string)
 
 print('ClosedQuestions', ClosedQuestions)
 
@@ -165,7 +168,7 @@ for USE_XL in (False, True):
             
             if k not in ClosedQuestionsTicked else
             
-            [q + ('_' + key) * (key != 'value') for key in QF_FIELDS]
+            [q + '_' + key for key in QF_FIELDS]
             
             if k.endswith('digits') else
             
