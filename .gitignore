@@ -1,2 +1,4 @@
 __pycache__
 *.pyc
+rubiks/*
+strip-prefix.py

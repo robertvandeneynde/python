@@ -4,7 +4,9 @@ import os
 
 from math import *
 tau = 2 * pi
+import itertools
 from itertools import *
+import functools
 from functools import *
 from operator import *
 from collections import *
