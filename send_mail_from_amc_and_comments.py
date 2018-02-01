@@ -15,19 +15,19 @@ from django.conf import settings
 from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
 
 HEADER        = 'PHYSH100 Examen Physique Janvier 2017-2018'
-SEND_MAIL     = True # If False, no mail will be sent
+SEND_MAIL     = False # If False, no mail will be sent
 PRINT_MAIL    = False # If True, mail will be printed, not sent.
 TEST_COMMENTS = False # if True, 1 mail will be sent will all the contents of comments.xml
 TO_ONE_PERSON = '' # 'rovdeynd@ulb.ac.be' # if present, all mails go to here
-ALSO_TO       = '' # if present, send also to here
+ALSO_TO       = '' # 'Guillaume.Tillema@ulb.ac.be' # if present, send also to here
 SEND_FROM     = 'rovdeynd@ulb.ac.be'
 COMPUTE_MARK  = False
 
 # Flow control
-MAX_EMAIL        = 10 # None means no limit, 1 for example can be used for testing (send only 1 mail).
+MAX_EMAIL        = None # None means no limit, 1 for example can be used for testing (send only 1 mail).
 SKIP_LIMIT       = None # None or 0 means begin at first student, otherwise, skip SKIP_LIMIT students.
-FILTER_MATRICULE = None # Default : None, can also be a int, or a list of int
-FILTER_NETID     = None # Default : None, can also be a netid, or a list of netid, or a regex
+FILTER_MATRICULE = None # Default : None, can also be a int, or a list of int; or a function taking a int
+FILTER_NETID     = None # Default : None, can also be a netid, or a list of netid, or a regex, or a function taking a str
 
 # XML OPTIONS
 CONFIG_XML = 'comments.xml'
@@ -38,7 +38,7 @@ USE_SERIE = False # if not False nor None, a number which is the number of serie
 # They must be English style "," separated, '"' if needed
 # If there are decimal points, English style too "1.5" not "1,5".
 # Ie. They can be read with python DictReader(file)
-STUDENT_FILE_CSV = 'ExamenJanvier2018_student_file.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
+STUDENT_FILE_CSV = 'ExamenJanvier2018_student_file_from_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
 QUESTIONS_TICKED_FILE_CSV = 'ExamenJanvier2018Brut_numerical_values_refilled.csv' # Must have COPIE, A:MATRICULE, TICKED ";" amc option, "," separated. Pair QO1/QO1COMMENTS
 
 # Directories OPTIONS
@@ -294,8 +294,6 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
 
 faq = make_faq_info_from_file(CONFIG_XML)
 
-faq_info = faq.info
-
 def clean_ws(x):
     from textwrap import dedent
     return dedent(x.strip('\n'))
@@ -361,6 +359,8 @@ class StudentInfo:
     def __init__(self):
         with open(STUDENT_FILE_CSV) as f:
             self.Students = [{simplify_key(k):v for k,v in student.items()} for student in csv.DictReader(f)]
+            for s in self.Students:
+                s['MATRICULE'] = str(int(s['MATRICULE'])) # remove zero at beginning
         self.Matricule_to_Netid = {s['MATRICULE']: s['NETID'] for s in self.Students}
 
 def printret(x, *args, **kwargs):
@@ -467,6 +467,12 @@ if False:
 student_info = StudentInfo()
 copy_info = CopyInfo()
 
+warning('Matricule without copy: ' + ' '.join(
+    student['MATRICULE']
+    for student in student_info.Students
+    if student['MATRICULE'] not in copy_info.Matricule_to_CopyNumber
+))
+
 for feuille, matricule, netid, prenom, nom in (
     [['a0', '123456', 'test', 'John', 'Doe']] if TEST_COMMENTS else
     (
@@ -476,15 +482,10 @@ for feuille, matricule, netid, prenom, nom in (
             student.get('PRENOM', ''),
             student['NOM'])
         for student in student_info.Students
+        if student['MATRICULE'] in copy_info.Matricule_to_CopyNumber
     ) if True else [] # TODO: (some) DB
     ): # aaq for 4 # aq for 8 # ad for 14
     # and (netid < 'aaq') -- (feuille in "a201", "b250", "a244", "b284")) -- "a21", "a279", "b208", "a87", "a295"))
-    
-    if SKIP_LIMIT is not None and next(skipLimit) < SKIP_LIMIT:
-        continue
-    
-    if MAX_EMAIL is not None and next(countLimit) >= MAX_EMAIL:
-        break
     
     if FILTER_MATRICULE:
         if isinstance(FILTER_MATRICULE, (int,str)) and not(int(matricule) == int(FILTER_MATRICULE)):
@@ -493,20 +494,31 @@ for feuille, matricule, netid, prenom, nom in (
             continue
         elif is_regex(FILTER_MATRICULE) and not FILTER_MATRICULE.match(matricule):
             continue
+        elif hasattr(FILTER_MATRICULE, '__call__') and not FILTER_MATRICULE(int(matricule)):
+            continue
     
-    if netid is None:
-        warning(feuille, 'has no netid')
-        continue
-    
-    if FILTER_NETID:
+    if netid is not None and FILTER_NETID:
         if isinstance(FILTER_NETID, str) and not (netid == FILTER_NETID):
             continue
         elif isinstance(FILTER_NETID, (tuple,list,set)) and not (netid in FILTER_NETID):
             continue
         elif is_regex(FILTER_NETID) and not FILTER_NETID.match(netid):
             continue
+        elif hasattr(FILTER_NETID, '__call__') and not FILTER_NETID(matricule):
+            continue
     
-    info('Creating', feuille, 'for', netid)
+    if SKIP_LIMIT is not None and next(skipLimit) < SKIP_LIMIT:
+        continue
+    
+    currentCount = next(countLimit)
+    if MAX_EMAIL is not None and currentCount >= MAX_EMAIL:
+        break
+    
+    if netid is None:
+        warning(feuille, 'has no netid')
+        continue
+    
+    info('{: 4}'.format(currentCount + (SKIP_LIMIT or 0)), 'Creating', feuille, 'for', netid, matricule)
     
     if USE_SERIE:
         assert feuille.startswith('a') or feuille.startswith('b')
@@ -514,7 +526,7 @@ for feuille, matricule, netid, prenom, nom in (
     
     mail = EmailMessage(
         HEADER,
-        'Bonjour {prenom} {nom} (matricule {matricule}, netid {netid}), voici en attaché votre examen ({header}).'.format(
+        'Bonjour {prenom} {nom} (matricule {matricule}, netid {netid}), voici en attaché votre examen ({header}), la correction de l\'examen se trouve sur l\'UV.'.format(
             matricule=matricule,
             prenom=prenom,
             nom=nom,
@@ -531,14 +543,14 @@ for feuille, matricule, netid, prenom, nom in (
                     "- {}".format(com.replace('\n', '\n  ')) # (com if '\n' not in com else com.replace('\n', '\n  ') + '\n')
                     for tag in tags 
                     for com in [
-                        faq_info[qid][tag] if not isinstance(faq_info[qid][tag], SerieSwitch) else
-                        getattr(faq_info[qid][tag], serie) # will raise Error if serie is not Defined
+                        faq.info[qid][tag] if not isinstance(faq.info[qid][tag], SerieSwitch) else
+                        getattr(faq.info[qid][tag], serie) # will raise Error if serie is not Defined
                     ]
                 )
             )
-            for qid in faq_info
+            for qid in faq.info
             for tags in [
-                list(faq_info.keys()) if TEST_COMMENTS else
+                list(faq.info[qid]) if TEST_COMMENTS else
                 copy_info.make_tags_for_matricule_and_question(faq, matricule, qid)
             ]
             if (tags or feuille in messages_info[qid])
@@ -549,8 +561,8 @@ for feuille, matricule, netid, prenom, nom in (
         ]),
         SEND_FROM,
         (
-            [TO_ONE_PERSON] if TO_ONE_PERSON else
-            [netid + '@ulb.ac.be'] + [ALSO_TO] * bool(ALSO_TO)
+            ([TO_ONE_PERSON] if TO_ONE_PERSON else [netid + '@ulb.ac.be'])
+            + [ALSO_TO] * bool(ALSO_TO)
         )
     )
     
@@ -558,14 +570,18 @@ for feuille, matricule, netid, prenom, nom in (
         if TEST_COMMENTS:
             filenames = ['test.pdf']
         else:
-            base_name = HEADER.replace(' ', '-')
-            filenames = {
-                '{} {} (Num{}).pdf'.format(
-                    HEADER,
-                    nom.upper() + ' ' + prenom,
-                    feuille,
-                ): copy_info.FindPdfForMatricule(matricule)
-            }
+            try:
+                base_name = HEADER.replace(' ', '-')
+                filenames = {
+                    '{} {} (Number {}).pdf'.format(
+                        HEADER,
+                        nom.upper() + ' ' + prenom,
+                        feuille,
+                    ): copy_info.FindPdfForMatricule(matricule)
+                }
+            except KeyError as e:
+                warning("Can't find pdf", e.__class__.__name__, e)
+                continue
     else:
         if TEST_COMMENTS:
             filenames = {i:'test.jpg' for i in (1,2,3,4,5)}

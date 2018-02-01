@@ -6,13 +6,9 @@ from PIL import ImageTk, Image
 from pprint import pprint
 from fractions import Fraction
 
-import argparse
-import re
-import os
-import sys
+import argparse, re, os, sys, csv
 from datetime import date, time, datetime, timedelta
-from collections import namedtuple
-import csv
+from collections import namedtuple, OrderedDict
 
 assert sys.version_info[0] > 2, "python 3 !"
 
@@ -45,11 +41,12 @@ p.add_argument('--zoom', type=Fraction, default=1)
 
 p.add_argument('--from-file', help='Take list of files from first column in from-file csv file (in dir)')
 p.add_argument('--ignore-file', help='Take list of files that are NOT in first column in ignore-file csv file (in dir)')
+# TODO: from-file-header specify the name of the column, implies --from-file can be read with csv.DictReader
 
 p.add_argument('--continue', action='store_true', help='Continue previous work (ignore files in annotate.csv and append to it)')
 p.add_argument('--new-column', action='store_true', help='Add new column in annotate.csv instead of creating new file. Order will be the one of annotate.csv, then normal order for the ones not present')
 
-p.add_argument('--excel-dialect', help='Choose dialect of Excel based on language.', default='fr')
+p.add_argument('--excel-dialect', help='Choose dialect of Excel based on language.', default='en')
 p.add_argument('--win-no-cd', action='store_true', help='On windows, the current working directory is guessed from argv[0] (right click behaviour). Write this for not doing that.')
 
 a = args = p.parse_args()
@@ -99,13 +96,20 @@ def read_file_names(filename):
     with open(filename, newline='') as f:
         return [data[0] for data in csv.reader(f, dialect='excel_loc') if data]
 
+def read_file_name_map(filename):
+    ''' return first column mapping other columns '''
+    with open(filename, newline='') as f:
+        return OrderedDict([(data[0], data[1:]) for data in csv.reader(f, dialect='excel_loc') if data])
+
 file_names = []
 
 if args.files:
     file_names += args.files
 
+file_names_map = OrderedDict()
 if args.from_file:
     file_names += read_file_names(args.from_file)
+    file_names_map = read_file_name_map(args.from_file)
 
 if file_names == []:
     my_sort = lambda S: sorted(S, key=key_natural_sort)
@@ -141,6 +145,10 @@ files = [f for f in file_names
          if f.lower().endswith('.png')
          or f.lower().endswith('.jpg')]
 
+if not files:
+    print('[Info]', 'Empty file')
+    sys.exit(0)
+
 if args.append:
     opened_csv = open(args.out, 'a', newline='')
 else:
@@ -159,11 +167,6 @@ if args.header:
     ])
     opened_csv.flush()
     
-root = Tk()
-root.title("Annotate")
-
-root.geometry("{}x{}+{}+{}".format(args.width, args.height, 0, 0))
-
 def to_p1p2(R:'x,y,w,h'):
     x,y,w,h = R
     return x, y, x+w, y+h
@@ -198,7 +201,7 @@ def onMouseDownMove(event):
     refresh_image()
 
 def onMouseUp(event):
-    print('--pos-x={} --pos-y={}'.format(*pos_image))
+    # print('--pos-x={} --pos-y={}'.format(*pos_image))
     global drag_point
     drag_point = None
 
@@ -238,6 +241,7 @@ def changeImage(direction, boolean=None):
         file_index = max(0, file_index + direction)
         image_base = Image.open(files[file_index])
         infovariable.set("{} ({}/{})".format(files[file_index], 1+file_index, len(files)))
+        infovariable2.set("{}".format(file_names_map.get(files[file_index], '')))
         refresh_image()
     
     if not args.boolean:
@@ -271,8 +275,8 @@ def onRotate(direction):
     rotate_angle += direction * 90
     if abs(rotate_angle) >= 360:
         rotate_angle %= 360
-    
-    print('--rotate={}'.format(rotate_angle))
+
+    # print('--rotate={}'.format(rotate_angle))
     
     refresh_image()
 
@@ -281,11 +285,16 @@ def onZoom(direction):
     
     zoom_factor *= Fraction('1.1') ** direction # (f *= 1.1) if d = +1 else (f /= 1.1) if d = -1 else (f *= 1.1 * 1.1) if d = +2 etc.
     
-    print('--zoom={}'.format(zoom_factor))
+    # print('--zoom={}'.format(zoom_factor))
     
     refresh_image()
 
 # BEGIN GUI
+
+root = Tk()
+root.title("Annotate")
+
+root.geometry("{}x{}+{}+{}".format(args.width, args.height, 0, 0))
 
 mainframe = ttk.Frame(root, padding="3 3 12 12")
 mainframe.pack(fill=BOTH, expand=True) # fill=X, expand=True) # expand=True) # sticky=(N, W, E, S), expand=True)
@@ -295,7 +304,18 @@ mainframe.pack(fill=BOTH, expand=True) # fill=X, expand=True) # expand=True) # s
 infovariable = StringVar()
 infovariable_label = ttk.Label(mainframe, textvariable=infovariable, anchor=S)
 infovariable_label.pack(fill=X, side=TOP)
-infovariable_label.bind('<Button-1>', lambda x: print(infovariable.get()))
+infovariable_label.bind('<Button-1>', lambda x: print(
+    infovariable.get(),
+    '--pos-x={} --pos-y={}'.format(*pos_image),
+    '--rotate={}'.format(rotate_angle),
+    '--zoom={}'.format(zoom_factor),
+    '--width={} --height={}'.format(event.width, event.height),
+))
+
+infovariable2 = StringVar()
+infovariable2_label = ttk.Label(mainframe, textvariable=infovariable2, anchor=S)
+if file_names_map:
+    infovariable2_label.pack(fill=X, side=TOP)
 
 # ttk.Button(mainframe, text='Zoom -', command=lambda: onZoom(1)).pack(side=BOTTOM)
 ttk.Button(mainframe, text='Rotate', command=lambda: onRotate(+1)).pack(side=BOTTOM)
@@ -317,6 +337,7 @@ widget.pack(side=BOTTOM, anchor=S) # (column=0, row=1, sticky=(W, E))
 file_index = 0
 image_base = Image.open(files[file_index])
 infovariable.set("{} ({}/{})".format(files[file_index], 1+file_index, len(files)))
+infovariable2.set("{}".format(file_names_map.get(files[file_index], '')))
 
 pos_image = args.pos_x, args.pos_y
 zoom_factor = args.zoom
@@ -351,7 +372,8 @@ if not args.boolean:
     text_variable_entry.focus()
     
 def onResize(event):
-    print('--width={} --height={}'.format(event.width, event.height))
+    pass
+    # print('--width={} --height={}'.format(event.width, event.height))
     # event.x event.y event.x_root event.y_root
     
 root.bind("<Configure>", onResize)
