@@ -22,6 +22,7 @@ import unicodedata
 import re
 import json
 import csv
+import sqlite3
 from pprint import pprint
 
 import operator
