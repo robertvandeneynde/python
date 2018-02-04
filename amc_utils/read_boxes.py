@@ -1,16 +1,9 @@
 import sqlite3
 import csv
 import re
+import xml.etree.ElementTree as ET
 
 Re = re.compile
-
-serie = 'A'
-proj = f'generateurAMC_{serie}'
-# student_csv = f'.csv'
-
-db_layout = sqlite3.connect(f'{proj}/data/layout.sqlite')
-db_capture = sqlite3.connect(f'{proj}/data/capture.sqlite')
-db_association = sqlite3.connect(f'{proj}/data/association.sqlite')
 
 def irange(*args):
     """ inclusiverange: irange(1,5) == range(1,6) """
@@ -58,10 +51,12 @@ class DictCollection:
     Data['AmcStudentId', 'to', 'Name'] # TODO, BEWARE: modification
     """
     
-    def __init__(self):
+    def __init__(self, update_no_duplicates=False):
         self.dicts = {}
+        self.update_no_duplicates = update_no_duplicates
     
-    def __setitem__(self, tup:('a', 'action:from|to', 'b'), D:dict):
+    @staticmethod
+    def _read_tup(tup:('a', 'action:from|to', 'b')):
         a, action, b = tup
         if isinstance(a, DictCollection.ColumnId):
             a = a.name
@@ -74,26 +69,37 @@ class DictCollection:
         if action == 'to':
             a,b = b,a
         
+        return a,b
+    
+    def __setitem__(self, tup:('a', 'action:from|to', 'b'), D:dict):
+        a,b = self._read_tup(tup)
+        
         self.dicts[a,b] = D
         if (b,a) in self.dicts:
             del self.dicts[b,a] # modification
+    
+    def __contains__(self, tup):
+        a,b = self._read_tup(tup)
+        return (a,b) in self.dicts or (b,a) in self.dicts
+        
+    def set_or_update(self, tup:('a', 'action:from|to', 'b'), D:dict):
+        if tup not in self:
+            self[tup] = D
+        else:
+            if self.update_no_duplicates and bool(self[tup].keys() & D.keys()):
+                raise ValueError('updating duplicates !')
+            self[tup].update(D)
+            
+            a, b = self._read_tup(tup)
+            if (b,a) in self.dicts:
+                del self.dicts[b,a] # modification
     
     def __getitem__(self, tup:('a', 'action:from|to', 'b')) -> dict:
         """
         Dict['Matricule', 'to', 'AmcStudentId']
         Dict['AmcStudentId', 'from', 'Matricule']
         """
-        a, action, b = tup
-        if isinstance(a, DictCollection.ColumnId):
-            a = a.name
-        if isinstance(b, DictCollection.ColumnId):
-            b = b.name
-        
-        action = action.lower()
-        assert action in ('from', 'to')
-        
-        if action == 'to':
-            a,b = b,a
+        a, b = self._read_tup(tup)
         
         if (a,b) in self.dicts:
             return self.dicts[a,b]
@@ -128,9 +134,10 @@ class DictCollection:
     def keylist(self, *args):
         return [self(a) for a in args]
     
-    def populateDictWithKeys(self, n, *args):
+    def populateDictWithKeys(self, D, *args):
         for n in args:
             D[n] = self(n)
+            
 class QOInfo:
     class CorrectorNoTick(Exception):
         pass
@@ -138,39 +145,31 @@ class QOInfo:
     class CorrectorMultiTick(Exception):
         pass
 
-    def __init__(self, exam:int, name:'QO1'):
-        
+    def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
         assert QO.match(name)
-        qnum = int(QO.match(name).group(1))
+        self.Dict = Dict
+        self.dbs = dbs
+        self.seuil = seuil
+        self.exam = exam
+        self.name = name
+        self.qnum = int(QO.match(name).group(1))
+    
+    def correctionValue(self) -> 4:
+        if hasattr(self, '_correctionValue'):
+            return self._correctionValue
         
         D = DictCollection()
-        
-        CaseToRatio = D['AnswerPoints', 'to', 'Ratio'] = dict(db_capture.execute(f'''
+        CaseToRatio = D['AnswerPoints', 'to', 'Ratio'] = dict(self.dbs['capture'].execute(f'''
             select id_b, 1.0*black/total from capture_zone
             where student=?
             and type={ZONE_BOX}
             and id_a=?
             ''',
-            (exam,
-             LatexQuestionName(name).to(AmcQuestionId))
+            (self.exam,
+             self.Dict('LatexQuestionName', self.name).to('AmcQuestionId'))
         ))
-            
-        CaseToRatioAnnotate = D['AnswerAnnotate', 'to', 'Ratio'] = dict(db_capture.execute(f'''
-            select id_b, 1.0*black/total from capture_zone
-            where student=?
-            and type={ZONE_BOX}
-            and id_a=?
-            ''',
-            (exam,
-             LatexQuestionName(QOANN_FORMAT(qnum)).to(AmcQuestionId))
-        ))
-        
         assert CaseToRatio.keys() == set(irange(1,11))
-        assert CaseToRatioAnnotate.keys() == set(irange(1,7)) # 7 annotations possible
-        
-        points = [int(k)-1 for k,v in CaseToRatio.items() if v >= seuil]
-        annotations = [int(k)-1 for k,v in CaseToRatioAnnotate.items() if v >= seuil]
-        
+        points = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
         if len(points) == 0:
             raise QOInfo.CorrectorNoTick("no points ticked")
         
@@ -178,36 +177,47 @@ class QOInfo:
             raise QOInfo.CorrectorMultiTick("too much points ticked")
         
         self._correctionValue = points[0]
-        self._correctionCommentsList = annotations
-    
-    def correctionValue(self) -> 4:
         return self._correctionValue
     
     def correctionCommentsList(self) -> [0, 2, 3]:
+        if hasattr(self, '_correctionCommentsList'):
+            return self._correctionCommentsList
+        
+        AnswerAnnotate_to_Ratio = dict(self.dbs['capture'].execute(f'''
+            select id_b, 1.0*black/total from capture_zone
+            where student=?
+            and type={ZONE_BOX}
+            and id_a=?
+            ''',
+            (self.exam,
+             self.Dict('LatexQuestionName', QOANN_FORMAT(self.qnum)).to('AmcQuestionId'))
+        ))
+        assert AnswerAnnotate_to_Ratio.keys() == set(irange(1,7)) # 7 annotations possible
+        annotations = [int(k)-1 for k,v in AnswerAnnotate_to_Ratio.items() if v >= self.seuil]
+        
+        self._correctionCommentsList = annotations
         return self._correctionCommentsList
 
-import xml.etree.ElementTree as ET
-xmldoc = ET.parse(f'{proj}/options.xml')
+class ReadFromAnnotate:
+    def __init__(self, annotate_csv_file):
+        self.annotate_csv_file = annotate_csv_file
+        assert annotate_csv_file.endswith('.csv')
 
-try:
-    seuil = float(xmldoc.find('seuil').text)
-except:
-    warning('seuil not found in xml, default seuil used')
-    seuil = 0.35
-    
-ZONE_BOX = 4
+class ReadFromMatriculeMarkCsv:
+    def __init__(self, csv_file, column_name:'QO2'):
+        self.column_name = column_name
+        assert csv_file.endswith('.csv')
+        
+        self.Dict = DictCollection()
+        self.Matricule = self.Dict('Matricule')
+        self.Mark = self.Dict('Mark')
+        
+        with open(csv_file) as f:
+            self.Dict['Matricule', 'to', 'Mark'] = {int(s['MATRICULE']): int(s[column_name]) for s in csv.DictReader(f)}
 
-Dict = DictCollection()
-AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
-AmcQuestionId, LatexQuestionName = Dict.keylist('AmcQuestionId', 'LatexQuestionName')
-
-Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
-    db_layout.execute('''select question, name from layout_question'''))
-
-Dict[AmcStudentId, 'to', Matricule] = {
-    int(student): int(auto or manual)
-    for student, auto, manual in db_association.execute('select student, auto, manual from association_association')
-}
+if __name__ != '__main__':
+    import sys
+    sys.exit(0)
 
 QO = Re('QO(\d+)')
 QO_FORMAT = 'QO{}'.format
@@ -215,12 +225,55 @@ QO_FORMAT = 'QO{}'.format
 QOANN = Re('QANN(\d+)')
 QOANN_FORMAT = 'QANN{}'.format
 
-for qid, latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].items():
-    if QO.match(latexname):
+ZONE_BOX = 4
+
+SERIES = ('A', 'B')
+PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
+
+qo_info = {
+    'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
+}
+
+for serie in SERIES:
+    proj = PROJ_NAME_FROM_SERIE(serie)
+    # student_csv = f'.csv'
+
+    dbs = defaultdict(lambda name: sqlite3.connect(f'{proj}/data/{name}.sqlite'))
+
+    xmldoc = ET.parse(f'{proj}/options.xml')
+
+    try:
+        seuil = float(xmldoc.find('seuil').text)
+    except:
+        warning(f'serie {serie}: seuil not found in xml, default seuil used')
+        seuil = 0.35
+    
+    Dict = DictCollection()
+    
+    AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
+    AmcQuestionId, LatexQuestionName = Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+    
+    Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
+        dbs['layout'].execute('''select question, name from layout_question'''))
+
+    Dict[AmcStudentId, 'to', Matricule] = {
+        int(student): int(auto or manual)
+        for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association')
+    }
+
+    for latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].values():
+        if not QO.match(latexname):
+            continue # TODO QF (see compute_digits)
         for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
-            try:
-                info = QOInfo(exam, latexname)
-                value, annotations = info.correctionValue(), info.correctionCommentsList()
-                print(exam, matricule, latexname, value, ''.join(chr(ord('A') + i) for i in annotations))
-            except (QOInfo.CorrectorMultiTick, QOInfo.CorrectorNoTick) as e:
-                error(e.__class__.__name__, exam, matricule, latexname)
+            if latexname in qo_info and isinstance(qo_info[latexname], ReadFromMatriculeMarkCsv):
+                mark = qo_info[latexname].Matricule(matricule).to(qo_info[latexname].Mark)
+                annotations = [] # TODO
+            else: # FromScannedAnnotationsAndMark
+                try:
+                    info = QOInfo(Dict, dbs, seuil, exam, latexname)
+                    mark = info.correctionValue()
+                    annotations = info.correctionCommentsList()
+                except (QOInfo.CorrectorMultiTick, QOInfo.CorrectorNoTick) as e:
+                    error("{}{}".format(serie, exam), matricule, latexname, e.__class__.__name__, e.__class__.__name__)
+                    continue
+            print("{}{}".format(serie, exam), matricule, latexname, mark, ''.join(chr(ord('A') + i) for i in annotations))

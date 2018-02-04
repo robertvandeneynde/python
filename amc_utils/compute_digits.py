@@ -16,6 +16,12 @@ from pprint import pprint # for debugging
 
 assert sys.version_info[0] >= 3, "Python 3 please"
 
+def warning(*args):
+    print('[Warning]', *args)
+    
+def info(*args):
+    print('[Info]', *args)
+
 p = argparse.ArgumentParser()
 
 p.add_argument('filename')
@@ -56,7 +62,7 @@ class EmptyColumn(Exception):
 class MultipleTicksInColumn(Exception):
     pass
 
-def parseQF(csvLine:list, name:'QF1b', *, base=10, policies=POLICIES):
+def parseQF(csvLine:dict, name:'QF1b', *, base=10, policies=POLICIES):
     def parsePart(part:'digits|exp', expectedNumbers:3, *, base=base, hasSign=True, direction:'plus|minus'='plus'):
         """
         Parse a signed number.
@@ -127,7 +133,7 @@ def parseFrenchNumber(string):
 def looksLikeFrenchNumber(string):
     return string and all(c in '0123456789,' for c in string)
 
-print('ClosedQuestions', ClosedQuestions)
+info('ClosedQuestions', ClosedQuestions)
 
 flatten = lambda X: [y for x in X for y in x]
 
@@ -141,7 +147,7 @@ for USE_XL in (False, True):
         try:
             import openpyxl
         except ImportError:
-            print('[WARNING] openpyxl not installed, no xlsx generated.')
+            warning('openpyxl not installed, no xlsx generated.')
             continue
 
         wb = openpyxl.Workbook()
@@ -215,7 +221,7 @@ for USE_XL in (False, True):
     finally:
         close()
 
-    print('Generated', out_filename)
+    info('Generated', out_filename)
 
 if os.name == 'nt':    
     os.system('pause')

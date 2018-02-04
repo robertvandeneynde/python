@@ -526,12 +526,13 @@ for feuille, matricule, netid, prenom, nom in (
     
     mail = EmailMessage(
         HEADER,
-        'Bonjour {prenom} {nom} (matricule {matricule}, netid {netid}), voici en attaché votre examen ({header}), la correction de l\'examen se trouve sur l\'UV.'.format(
+        'Bonjour {prenom} {nom} (matricule {matricule}, netid {netid}, copie d\'examen numéro {feuille}), voici en attaché votre examen ({header}), la correction de l\'examen se trouve sur l\'UV.'.format(
             matricule=matricule,
             prenom=prenom,
             nom=nom,
             netid=netid,
             header=HEADER,
+            feuille=feuille,
         ) + '\n\n' + '\n\n'.join(
             'Le·la correcteur·trice de la question {qid} a laissé ces commentaires supplémentaires:\n{coms_perso}{coms}'.format(
                 qid = qid,
