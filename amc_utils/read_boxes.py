@@ -137,7 +137,91 @@ class DictCollection:
     def populateDictWithKeys(self, D, *args):
         for n in args:
             D[n] = self(n)
+
+class QFInfo:
+    POLICIES = {'EmptyColumnMeansFirstTicked'} & {'EmptyColumnMeansFirstTicked', 'NoSignMeansPlus'} # set(args.policies)
+    
+    class EmptyColumn(Exception):
+        pass
+
+    class MultipleTicksInColumn(Exception):
+        pass
+    
+    def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
+        assert QFSerie.match(name)
+        self.Dict = Dict
+        self.dbs = dbs
+        self.seuil = seuil
+        self.exam = exam
+        self.name = name
+
+    def parseQF(self, *, base=10, policies=POLICIES) -> {'value':float, 'mantissa':float, 'exp':float, 'sign':int}:
+        
+        def parsePart(part:'digits|exp', expectedNumbers:3, *, base=base, hasSign=True, direction:'plus|minus'='plus'):
+            """
+            Parse a signed number.
+            if hasSign, the first two boxes contains the sign (first = +, second = -).
+            Then we have base=10 expectedNumbers boxes representing numbers. For example expectedNumbers = 3, digits = [6,0,9].
+            If direction == "plus" Then Digits represents 609
+            If direction == "minus" Then Digits represents 6.09
+            """
+            assert part in ('digits', 'exp') and direction in ('plus', 'minus')
+            expectedBoxes = (2 if hasSign else 0) + expectedNumbers * base
             
+            CaseToRatio = dict(self.dbs['capture'].execute(f'''
+                select id_b, 1.0*black/total from capture_zone
+                where student=?
+                and type={ZONE_BOX}
+                and id_a=?
+                ''',
+                (self.exam,
+                self.Dict('LatexQuestionName', self.name + part).to('AmcQuestionId'))
+            ))
+            assert CaseToRatio.keys() == set(irange(1,expectedBoxes))
+            
+            Ticks = [int(v >= self.seuil) for k,v in CaseToRatio.items()]
+            # Example: Ticks = [0,1, 0,0,0,1,0,0,0,0,0,0, 0,1,0,0,0,0,0,0,0,0]
+            
+            if hasSign:
+                Sign = Ticks[0:2]
+                Digits = [Ticks[2+n : 2+n+base] for n in range(0, base * expectedNumbers, base)]
+            else:
+                Sign = [1,0] # Positive
+                Digits = [Ticks[n : n+base] for n in range(0, base * expectedNumbers, base)]
+            
+            if Sign == [0,0] and 'NoSignMeansPlus' in policies:
+                Sign = [1,0]
+            
+            # Example if hasSign == True and base == 10: Sign = [0,1]; Digits = [[0,0,0,1,0,0,0,0,0,0], [0,1,0,0,0,0,0,0,0,0]]
+            
+            for col in [Sign] + Digits:
+                if sum(col) == 0:
+                    if 'EmptyColumnMeansFirstTicked' in policies:
+                        col[0] = 1
+                    else:
+                        raise QFInfo.EmptyColumn("User ticked zero columns in a column (for {})".format(part))
+                if sum(col) > 1:
+                    raise QFInfo.MultipleTicksInColumn("User ticked two columns in a column (for {})".format(part))
+            
+            sign = +1 if Sign[0] else -1
+            digits = [D.index(1) for D in Digits]
+            
+            # Example: sign = -1; digits = [3, 1]
+            
+            number = (sign * sum(n * base ** (-i) for i,n in enumerate(digits)) if direction == 'minus' else
+                      sign * sum(n * base ** i for i,n in enumerate(reversed(digits))) if direction == 'plus' else None)
+        
+            # Example if direction == 'minus': number = -3.1
+            # Example if direction == 'plus':  number = -31
+            
+            return number
+        
+        number = parsePart('digits', 3, hasSign=True, direction='minus')
+        numberExp = parsePart('exp', 1, hasSign=True, direction='plus')
+        numberFinal = number * base ** numberExp
+        
+        return {'value': numberFinal, 'mantissa':number, 'exp':numberExp, 'sign': 0 if numberFinal == 0 else -1 if numberFinal < 0 else 1}
+
 class QOInfo:
     class CorrectorNoTick(Exception):
         pass
@@ -219,10 +303,15 @@ if __name__ != '__main__':
     import sys
     sys.exit(0)
 
-QO = Re('QO(\d+)')
+QO = Re('^QO(\d+)$')
 QO_FORMAT = 'QO{}'.format
 
-QOANN = Re('QANN(\d+)')
+QFSerie = Re('^QF(?P<num>\d+)(?P<serie>\w)$')
+QFSerieFormat = 'QF{num}{serie}'.format
+QFDigitsReg = Re('^QF(?P<num>\d+)(?P<serie>\w)(?P<part>digits|exp)$')
+QFDigitsFormat = 'QF{num}{serie}{part}'.format
+
+QOANN = Re('^QANN(\d+)$')
 QOANN_FORMAT = 'QANN{}'.format
 
 ZONE_BOX = 4
@@ -230,15 +319,51 @@ ZONE_BOX = 4
 SERIES = ('A', 'B')
 PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
 
-qo_info = {
+question_formats = {
     'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
 }
 
+qf_answers = {
+    'QF5a': 7.81e-1, # 7.71e-1 7.81e-1
+    'QF6a': -3.32e-9, # 3.22e-9 3.42e-9
+    'QF7a': 1.33e-8, # 1.23e-8 1.43e-8
+    'QF8a': 2.5, # 2.4, 2.6
+    'QF5b': 1.53, # 1.43 1.63
+    'QF6b': -5.53e-9, # 5.43e-9 5.63e-9
+    'QF7b': 1.18e-8, # 1.08e-8 1.28e-8
+    'QF8b': 1.41, # 1.31 1.51
+}
+
+qf_interv = {
+    'QF5a': [7.71e-1, 7.81e-1],
+    'QF6a': [3.22e-9, 3.42e-9],
+    'QF7a': [1.23e-8, 1.43e-8],
+    'QF8a': [2.4, 2.6],
+    'QF5b': [1.43, 1.63],
+    'QF6b': [5.43e-9, 5.63e-9],
+    'QF7b': [1.08e-8, 1.28e-8],
+    'QF8b': [1.31, 1.51],
+}
+
+qf_policies = {
+    'QF5a': set(),
+    'QF6a': {'SignMinus1'},
+    'QF7a': set(),
+    'QF8a': set(),
+    'QF5b': set(),
+    'QF6b': {'SignMinus1'},
+    'QF7b': set(),
+    'QF8b': set(),
+}
+
+assert all(X <= {'SignMinus1'} for X in qf_policies.values())
+
+print('COPIE','MATRICULE','QUESTION','MARK','COMMENTS')
 for serie in SERIES:
     proj = PROJ_NAME_FROM_SERIE(serie)
     # student_csv = f'.csv'
 
-    dbs = defaultdict(lambda name: sqlite3.connect(f'{proj}/data/{name}.sqlite'))
+    dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
 
     xmldoc = ET.parse(f'{proj}/options.xml')
 
@@ -262,18 +387,59 @@ for serie in SERIES:
     }
 
     for latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].values():
-        if not QO.match(latexname):
-            continue # TODO QF (see compute_digits)
         for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
-            if latexname in qo_info and isinstance(qo_info[latexname], ReadFromMatriculeMarkCsv):
-                mark = qo_info[latexname].Matricule(matricule).to(qo_info[latexname].Mark)
-                annotations = [] # TODO
-            else: # FromScannedAnnotationsAndMark
+            comments = ''
+            if QFDigitsReg.match(latexname) and QFDigitsReg.match(latexname).group('part') == 'digits': # latexname = QF5digits
+                m = QFDigitsReg.match(latexname).groupdict()
+                basename = QFDigitsFormat(part='', num=m['num'], serie=m['serie']) # basename = QF5a
+                info = QFInfo(Dict, dbs, seuil, exam, basename)
+                
                 try:
-                    info = QOInfo(Dict, dbs, seuil, exam, latexname)
-                    mark = info.correctionValue()
-                    annotations = info.correctionCommentsList()
-                except (QOInfo.CorrectorMultiTick, QOInfo.CorrectorNoTick) as e:
-                    error("{}{}".format(serie, exam), matricule, latexname, e.__class__.__name__, e.__class__.__name__)
-                    continue
-            print("{}{}".format(serie, exam), matricule, latexname, mark, ''.join(chr(ord('A') + i) for i in annotations))
+                    values = info.parseQF()
+                    
+                    value = values['value'] # values['mantissa'], values['exp'], values['sign']
+                    answer = qf_answers[basename]
+                    answer_sign = (0 if answer == 0 else 1 if answer > 0 else -1)
+                    
+                    themin = abs(answer) * 0.99
+                    themax = abs(answer) * 1.01
+                    
+                    themin, themax = qf_interv[basename]
+                    
+                    if themin <= abs(value) <= themax:
+                        mark = 5
+                        if 'SignMinus1' in qf_policies[basename] and values['sign'] != answer_sign:
+                            mark -= 1
+                    elif any(themin * 10 ** i <= abs(value) <= themax * 10 ** i for i in irange(-20,20)):
+                        mark = 3
+                        if 'SignMinus1' in qf_policies[basename] and values['sign'] != answer_sign:
+                            mark -= 1
+                    else:
+                        mark = 0
+                    comments = (values, basename, answer)
+                    
+                    annotations = []
+                except QFInfo.MultipleTicksInColumn:
+                    mark = 0
+                        
+            elif QO.match(latexname):
+                continue
+                if latexname in question_formats:
+                    fmt = question_formats[latexname]
+                    if isinstance(fmt, ReadFromMatriculeMarkCsv):
+                        mark = fmt.Matricule(matricule).to(fmt.Mark)
+                        annotations = [] # TODO
+                    else:
+                        log(error("{}{}".format(serie, exam), matricule, latexname, 'UnknownQuestionFormat', 'UnknownQuestionFormat'))
+                        continue
+                else: # FromScannedAnnotationsAndMark
+                    try:
+                        info = QOInfo(Dict, dbs, seuil, exam, latexname)
+                        mark = info.correctionValue()
+                        annotations = info.correctionCommentsList()
+                    except (QOInfo.CorrectorMultiTick, QOInfo.CorrectorNoTick) as e:
+                        error("{}{}".format(serie, exam), matricule, latexname, e.__class__.__name__, e.__class__.__name__)
+                        continue
+            else:
+                continue
+            print("{}{}".format(serie, exam), matricule, latexname, mark, ''.join(chr(ord('A') + i) for i in annotations), '"'+str(comments)+'"')
