@@ -65,8 +65,6 @@ def info(*args):
 def is_regex(obj):
     return isinstance(obj, re.compile('').__class__)
 
-# BEGIN SerieSwitch is not used for EXAM_IRCI_2017_2018_JANVIER
-
 from collections import namedtuple
 class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
     """
@@ -101,8 +99,6 @@ class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
         """ SerieSwitch.from_dict_to_list('hello {m}', m=['m', 'M'], R=['R', 'L']}) """
         if args: raise ValueError('No args')
         return SerieSwitch.from_dict_to_list(txt, kwargs)
-
-# END SerieSwitch is not used for EXAM_IRCI_2017_2018_JANVIER
 
 from collections import OrderedDict, defaultdict
 class FaqInfo:

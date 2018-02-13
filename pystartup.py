@@ -3,7 +3,8 @@ import sys
 import os
 
 from math import *
-tau = 2 * pi
+if sys.version_info < (3,6):
+    tau = 2 * pi
 import itertools
 from itertools import *
 import functools

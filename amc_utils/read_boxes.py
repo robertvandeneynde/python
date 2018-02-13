@@ -364,6 +364,22 @@ class CSVAndXLWriter:
     def __exit__(self, type, value, traceback):
         self.csv.__exit__(type, value, traceback)
         self.xl.__exit__(type, value, traceback)
+        
+class PrintWriter:
+    def __init__(self, filename):
+        print('--', filename, '--')
+        
+    def writerow(self, row):
+        print(*row)
+    
+    def close(self):
+        pass
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type, value, traceback):
+        pass
 
 if __name__ != '__main__':
     import sys
@@ -389,7 +405,7 @@ SERIES = ('A', 'B')
 PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
 
 question_formats = {
-    'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
+    # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
 }
 
 qf_answers = { # list of [value, min, max, -points minus]
@@ -432,7 +448,8 @@ assert all(len(L) > 0 for L in qf_answers.values())
 assert all(len(X) == 4 for L in qf_answers.values() for X in L)
 assert all(minus == 0 for L in qf_answers.values() for i,(value, m, M, minus) in enumerate(L) if i == 0)
 assert all(minus <= 0 for L in qf_answers.values() for value, m, M, minus in L)
-# TODO: assert no overlap
+
+# TODO: assert no overlap : assert all(map(no_overlap, qf_answers.values()))
 
 qf_policies = {
     'QF5a': set(),
