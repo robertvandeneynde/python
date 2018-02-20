@@ -4,46 +4,58 @@ import sqlite3
 
 import os, sys, re
 assert sys.version_info >= (3, 6)
+from re import compile as Re
 
 import csv
 from pprint import pprint
 import itertools
 from itertools import groupby
+from collections import namedtuple
 
 import django
 from django.conf import settings
 from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
+import xml.etree.ElementTree as ET
 
 HEADER        = 'PHYSH100 Examen Physique Janvier 2017-2018'
+NUM_PAGES     = 5
 SEND_MAIL     = False # If False, no mail will be sent
 PRINT_MAIL    = False # If True, mail will be printed, not sent.
-TEST_COMMENTS = False # if True, 1 mail will be sent will all the contents of comments.xml
-TO_ONE_PERSON = '' # 'rovdeynd@ulb.ac.be' # if present, all mails go to here
+TEST_COMMENTS = True # if True, 1 mail will be sent will all the contents of comments.xml
+TO_ONE_PERSON = 'rovdeynd@ulb.ac.be' # if present, all mails go to here
 ALSO_TO       = '' # 'Guillaume.Tillema@ulb.ac.be' # if present, send also to here
 SEND_FROM     = 'rovdeynd@ulb.ac.be'
 COMPUTE_MARK  = False
+MAKE_PDF      = True
 
 # Flow control
-MAX_EMAIL        = None # None means no limit, 1 for example can be used for testing (send only 1 mail).
+MAX_EMAIL        = 1 # None means no limit, 1 for example can be used for testing (send only 1 mail).
 SKIP_LIMIT       = None # None or 0 means begin at first student, otherwise, skip SKIP_LIMIT students.
 FILTER_MATRICULE = None # Default : None, can also be a int, or a list of int; or a function taking a int
 FILTER_NETID     = None # Default : None, can also be a netid, or a list of netid, or a regex, or a function taking a str
 
 # XML OPTIONS
 CONFIG_XML = 'comments.xml'
-USE_SERIE = False # if not False nor None, a number which is the number of series, multiple AMC projects exist, one for each "serie" # TODO: decide if this should go to the XML
 
 # CSV OPTIONS
 # All CSV must have first line as Header
 # They must be English style "," separated, '"' if needed
 # If there are decimal points, English style too "1.5" not "1,5".
 # Ie. They can be read with python DictReader(file)
-STUDENT_FILE_CSV = 'ExamenJanvier2018_student_file_from_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
+STUDENT_FILE_CSV = '201718_PHYS-S-1001_SES1_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
 QUESTIONS_TICKED_FILE_CSV = 'ExamenJanvier2018Brut_numerical_values_refilled.csv' # Must have COPIE, A:MATRICULE, TICKED ";" amc option, "," separated. Pair QO1/QO1COMMENTS
 
 # Directories OPTIONS
-PDF_DIR = '.'
-AMC_PROJECT = "" # if series are used: {serie} will be replaced by for example "a".
+SERIES = ('a', 'b') # if empty or None, implies only one project
+PDF_DIR = '.' # deprecated
+AMC_PROJECT = "generateurAMC_{serie}" # if series are used: {serie} will be replaced by for example "a" (see SERIES)
+# TODO: decide if project config should go in XML
+
+ANNOTATE_CSV_PATH = "q{qid}-tags.csv"
+
+if SERIES:
+    assert all(Re('^\w.*\w|\w$').match(serie) for serie in SERIES), "Series must begin and end with"
+    assert len(set(SERIES)) == len(SERIES), "No duplicates allowed in series"
 
 settings.configure(
     EMAIL_USE_TLS = True,
@@ -54,7 +66,9 @@ settings.configure(
 )
 
 assert SEND_MAIL + PRINT_MAIL <= 1, "maximum one of SEND_MAIL, PRINT_MAIL"
-assert USE_SERIE in (False, None) or USE_SERIE == 2, "Currently, only 2 series can be used"
+
+if MAKE_PDF:
+    import img2pdf # https://gitlab.mister-muffin.de/josch/img2pdf
 
 def warning(*args):
     print('[Warning]', *args)
@@ -62,10 +76,154 @@ def warning(*args):
 def info(*args):
     print('[Info]', *args)
 
+def error(*args):
+    print('[Error]', *args)
+
 def is_regex(obj):
     return isinstance(obj, re.compile('').__class__)
 
-from collections import namedtuple
+def irange(*args):
+    """ inclusive_range: irange(1,5) == range(1,6) """
+    r = range(*args)
+    return range(r.start, r.stop + 1, r.step)
+
+def dict_int_key(it):
+    return {int(a):b for a,b in it}
+
+# Shared Class between amc_utils module
+class DictCollection:
+    """
+    Data = DictCollection()
+    Data['Matricule', 'to', 'AmcStudentId'] = {'12345' + str(i): i+1 for i in range(5)}
+
+    Data['Matricule', 'to', 'AmcStudentId'] # {'123450':1, '123451':2, '123452':3, '123453':4, '123454':5}
+    Data['Matricule', 'from', 'AmcStudentId'] # {1:'123450', 2:'123451', 3:'123452', 4:'123453', 5:'123454'}
+
+    Data('Matricule', '123450').to('AmcStudentId') # 1
+    Data('AmcStudentId', 1).to('Matricule') # '132450'
+
+    Matricule = Data('Matricule') # type ColumnId
+    student = Matricule('123450').to('AmcStudentId') # 1
+
+    AmcStudentId = Data('AmcStudentId')
+    student = Matricule('123450').to(AmcStudentId) # 1
+    
+    Data['Name', 'from', 'Matricule'] = {'123450': 'Jean', '123450': 'Marie'}
+    Data['AmcStudentId', 'to', 'Name'] # TODO, BEWARE: modification
+    
+    Matricule('1111111').set('AmcStudentId', '666') # Matricule('111111').to('AmcStudentId') == '666'
+    """
+    
+    def __init__(self, update_no_duplicates=False):
+        self.dicts = {}
+        self.update_no_duplicates = update_no_duplicates
+    
+    @staticmethod
+    def reverse_dict(D, check_uniq=False):
+        R = {y:x for x,y in D.items()}
+        if check_uniq and not(len(R) == len(D)):
+            raise ValueError('Not a bijection')
+        return R
+    
+    @staticmethod
+    def _read_tup(tup:('a', 'action:from|to', 'b')):
+        a, action, b = tup
+        if isinstance(a, DictCollection.ColumnId):
+            a = a.name
+        if isinstance(b, DictCollection.ColumnId):
+            b = b.name
+        
+        action = action.lower()
+        assert action in ('from', 'to')
+        
+        if action == 'to':
+            a,b = b,a
+        
+        return a,b
+    
+    def __setitem__(self, tup:('a', 'action:from|to', 'b'), D:dict):
+        a,b = self._read_tup(tup)
+        
+        self.dicts[a,b] = D
+        if (b,a) in self.dicts:
+            del self.dicts[b,a] # modification
+    
+    def __contains__(self, tup):
+        a,b = self._read_tup(tup)
+        return (a,b) in self.dicts or (b,a) in self.dicts
+        
+    def set_or_update(self, tup:('a', 'action:from|to', 'b'), D:dict):
+        if tup not in self:
+            self[tup] = D
+        else:
+            if self.update_no_duplicates and bool(self[tup].keys() & D.keys()):
+                raise ValueError('updating duplicates !')
+            self[tup].update(D)
+            
+            a, b = self._read_tup(tup)
+            if (b,a) in self.dicts:
+                del self.dicts[b,a] # modification
+    
+    def __getitem__(self, tup:('a', 'action:from|to', 'b')) -> dict:
+        """
+        Dict['Matricule', 'to', 'AmcStudentId']
+        Dict['AmcStudentId', 'from', 'Matricule']
+        """
+        a, b = self._read_tup(tup)
+        
+        if (a,b) in self.dicts:
+            return self.dicts[a,b]
+        if (b,a) in self.dicts:
+            self.dicts[a,b] = self.reverse_dict(self.dicts[b,a])
+            return self.dicts[a,b]
+        raise KeyError(' '.join(tup))
+    
+    class ColumnId:
+        def __init__(self, name, dictcls=None, value=None):
+            self.name = name
+            self.dictcls = dictcls
+            self.value = value
+
+        def to(self, other):
+            if self.value is None:
+                raise ValueError('value must be given and not None')
+            return self.dictcls[self.name, 'to', other][self.value]
+        
+        def exists(self, other):
+            if self.value is None:
+                raise ValueError('value must be given and not None')
+            return self.value in self.dictcls[self.name, 'to', other]
+        
+        def set(self, other, value):
+            if self.value is None:
+                raise ValueError('value must be given and not None')
+            self.dictcls[self.name, 'to', other][self.value] = value
+            
+            # delete reverse
+            a, b = self.dictcls._read_tup((self.name, 'to', other))
+            if (b,a) in self.dictcls.dicts:
+                del self.dictcls.dicts[b,a] # modification
+                # TODO: maybe just update self.dicts[b,a][self.value], but what if this introduces non bijection ?
+        
+        def __call__(self, value):
+            return DictCollection.ColumnId(self.name, self.dictcls, value)
+        
+        def __repr__(self):
+            if self.value is None:
+                return 'ColumnId({})'.format(self.name)
+            else:
+                return 'ColumnId({}, {!r})'.format(self.name, self.value)
+    
+    def __call__(self, name, value=None):
+        return DictCollection.ColumnId(name, self, value)
+    
+    def keylist(self, *args):
+        return [self(a) for a in args]
+    
+    def populateDictWithKeys(self, D, *args):
+        for n in args:
+            D[n] = self(n)
+
 class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
     """
     SerieSwitch(
@@ -100,6 +258,31 @@ class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
         if args: raise ValueError('No args')
         return SerieSwitch.from_dict_to_list(txt, kwargs)
 
+class TagSource:
+    pass
+
+class TagSourceAmcAnnotatedCopy(TagSource):
+    pass
+
+class TagSourceCsvImageAnnotate(TagSource):
+    
+    def data_for_qid(self, qid):
+        if qid not in self._cache:
+            with open(ANNOTATE_CSV_PATH.format(qid=qid)) as f:
+                L = list(csv.reader(f))
+            
+            assert all(len(x) == 2 for x in L)
+            
+            self._cache[qid] = {
+                a: tuple(b.split())
+                for a,b in L
+            }
+            
+        return self._cache[qid]
+    
+    def __init__(self):
+        self._cache = {}
+
 from collections import OrderedDict, defaultdict
 class FaqInfo:
     """
@@ -112,8 +295,16 @@ class FaqInfo:
                                         "nrj": "Attention" } }
     info = OrderedDict{ "1": OrderedDict{ "vf=0": SerieSwitch("Hello A", "Hello B") } }
     """
-    def __init__(self, info):
-        self.info = info
+    def __init__(self):
+        self.info = OrderedDict()
+        self.tags_sources = {}
+        self.matchers = {}
+        
+    def tag_source_for_qid(qid):
+        self.tags_sources[qid]
+    
+    def matcher_for_qid(qid):
+        self.matchers = {}
         
 def make_faq_info_from_file(filename:str) -> FaqInfo:
     from xml.dom.minidom import parse
@@ -132,11 +323,14 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
     """
     xml_doc: "Formal" syntax:
         questions: question+
-        question[id]: has comment+, has serie-switch?
-        comment[name]: has one text field
+        question[id, matcher=simple, source=amc-comment]: has comment+, has serie-switch?
+        comment[name, syntax=rawmd]: has one text field
         serie-switch: has tag+
         tag[name, value-*]: empty
         
+    question[matcher] and question[source] may also be on parent nodes to group
+    comment[syntax] can also be on parent nodes to group.
+    
     Examples:
     
     <questions>
@@ -200,10 +394,13 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
     }
     """
     
+    # Maybe the parsing is easier with xml.etree
+    
     def warning(*args):
         print('Warning:', *args)
     
-    info = OrderedDict()
+    faq = FaqInfo()
+    info = faq.info
     root = next(c for c in xml_doc.childNodes if c.nodeType == c.ELEMENT_NODE)
     RA = dict(root.attributes.items())
     # assert all(c.nodeName == 'question' for c in root.childNodes if c.nodeType == c.ELEMENT_NODE), 'in root: all ELEMENT_NODE are question '
@@ -257,10 +454,42 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
             info[qid][name] = (' '.join(lines) if syntax == 'oneline' else
                                '\n'.join(lines))
         
-        if (any(name.startswith('not') for name in info[qid])
-            and not all(name.startswith('not') for name in info[qid])):
-            warning('Mixing not* and regular comment[name]. Check list <question id="{}"> is {}'.format(qid, tuple(info[qid].keys())))
+        source = QA.get('source', RA.get('source', 'amc-comments'))
+        source_cls = {
+            'amc-comments': TagSourceAmcAnnotatedCopy,
+            'annotate-src': TagSourceCsvImageAnnotate,
+        }
         
+        try:
+            faq.tags_sources[qid] = source_cls[source]()
+        except KeyError:
+            raise
+        
+        matcher = QA.get('matcher', RA.get('matcher', 'simple'))
+        matcher_cls = {
+            'simple': CommentMatcherSimple,
+            'multiple': CommentMatcherMultiple,
+            'proposition': CommentMatcherBooleanProposition,
+            'boolean-list': CommentMatcherMultipleOrAnd,
+            'boolean': CommentMatcherFullBoolean,
+        }
+        
+        try:
+            faq.matchers[qid] = matcher_cls[matcher]()
+        except KeyError:
+            raise
+        
+        if matcher == "proposition":
+            if False: # this warning is not useful anymore
+                if (any(name.startswith('!') for name in info[qid])
+                    and not all(name.startswith('!') for name in info[qid])):
+                    warning('Mixing not* and regular comment[name]. Check list <question id="{}"> is {}'.format(qid, tuple(info[qid].keys())))
+        
+        if matcher == 'boolean':
+            matcher_more_characters = QA.get('matcher-more-characters', RA.get('matcher-more-characters'))
+            if matcher_more_characters:
+                faq.matchers[qid].set_more_characters(matcher_more_characters)
+                
         if question.getElementsByTagName('serie-switch'):
             serie_switch, = question.getElementsByTagName('serie-switch')
             # assert all ELEMENT_NODE are tag in serie_switch
@@ -286,33 +515,27 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
             for q in info[qid]:
                 info[qid][q] = SerieSwitch.from_dict_to_list(info[qid][q], serie_switch_info)
                     
-    return FaqInfo(info=info)
-
-faq = make_faq_info_from_file(CONFIG_XML)
+    return faq
 
 def clean_ws(x):
     from textwrap import dedent
     return dedent(x.strip('\n'))
 
-# BEGIN not used in EXAM_IRCI_2017_2018_JANVIER
-
 # TODO: read messages_info from xml as <message-info>, has same formatting options as <comment> (syntax=)
 messages_info = {
     "1": {
-        'b128': clean_ws("""
-            Some text for b128 for question 1
-            Another line for b128
-        """)
+        #'b128': clean_ws("""
+        #    Some text for b128 for question 1
+        #    Another line for b128
+        #""")
     },
     "2": {
-        'b208':clean_ws("""
-            Some text for b208 for question 2
-        """),
+        #'b208':clean_ws("""
+        #    Some text for b208 for question 2
+        #"""),
     },
     "3": {},
     "4": {},
-    "5": {},
-    "6": {},
 }
 
 #assert (
@@ -323,25 +546,28 @@ messages_info = {
     #- set(feuille for feuille, in db_conn.execute('select feuille from student where feuille is not NULL'))
 #)
 
-# END not used in EXAM_IRCI_2017_2018_JANVIER
-
 def add_lf_if_nempty(x):
     return x + '\n' if x else x
 
 class SerieInfo:
-    def __init__(self, serie_name):
+    def __init__(self, serie_name:'a'):
         self.serie_name = serie_name
         
-        with sqlite3.connect(os.path.join(serie_name, "data", "association.sqlite")) as db:
-            self.MatriculeToCopyNumber = {
+        self.Dict = DictCollection()
+        self.Matricule, self.CopyNumber, self.SrcPage = self.Dict.keylist('Matricule', 'CopyNumber', 'SrcPage')
+        
+        with sqlite3.connect(os.path.join(AMC_PROJECT.format(serie=serie_name), "data", "association.sqlite")) as db:
+            self.Dict[self.Matricule, 'to', self.CopyNumber] = self.MatriculeToCopyNumber = {
                 str(auto or manual): int(student)
                 for student, auto, manual in db.execute('select student, auto, manual from association_association')
             }
         
-        self.CopyNumberToSrcPage = defaultdict(list)
-        with sqlite3.connect(os.path.join(serie_name, "data", "capture.sqlite")) as db2:
+        CopyNumberToSrcPage = defaultdict(list)
+        with sqlite3.connect(os.path.join(AMC_PROJECT.format(serie=serie_name), "data", "capture.sqlite")) as db2:
             for student, src, page in db2.execute('select student, src, page from capture_page where src is not NULL'):
-                self.CopyNumberToSrcPage[int(student)].append( (int(page), str(src)) )
+                CopyNumberToSrcPage[int(student)].append( (int(page), str(src)) )
+        
+        self.Dict[self.CopyNumber, 'to', self.SrcPage] = dict(CopyNumberToSrcPage)
 
 def simplify_key(key):
     key = key.upper() # uppercase
@@ -395,92 +621,567 @@ class Reader:
         except:
             raise Reader.EmptyValue(f'Box TICKED:{base_name} is empty.')
 
-class CopyInfo:
+class CommentMatcher:
+    def compile_name(self, name):
+        return name
+    
+    def compile_tags(self, tags):
+        return tags
+    
+    def get_compiled(self, name, tags):
+        # cache name but not tags
+        if name not in self._name_cache:
+            self._name_cache[name] = self.compile_name(name)
+        return self._name_cache[name], self.compile_tags(tags)
+    
+    def match(self, name, tags):
+        raise ValueError('not implemented')
+    
     def __init__(self):
+        self._name_cache = {}
+    
+class CommentMatcherSetLowercase(CommentMatcher):
+    def compile_tags(self, tags):
+        return set(map(str.lower, tags))
+
+class CommentMatcherSimple(CommentMatcherSetLowercase):
+    def match(self, name, tags):
+        """ name="a" tags=['a', 'c'] -> True """
+        return name.lower() in tags
+    
+class CommentMatcherMultiple(CommentMatcherSetLowercase):
+    def compile_name(self, name):
+        return set(map(str.lower, name.split()))
+    
+    def match(self, name, tags):
+        """ name="a c", tags=['a', 'c', 'd'] -> True """
+        S, tags = self.get_compiled(name, tags)
+        return S <= tags
+    
+class CommentMatcherMultipleOrAnd(CommentMatcherSetLowercase):
+    def compile_name(self, name):
+        """ a | b & c | d -> [{'a'}, {'b', 'c'}, {'d'}]"""
+        S = [s.strip().lower() for s in name.split('|')]
+        assert all(S)
+        
+        S = [set(x.strip().lower() for x in s.split('&')) for s in S]
+        assert all(all(x) for x in S)
+        
+        return S
+    
+    def match(self, name, tags):
+        """ name="a | c | d & a | d & e", tags=['d', 'a'] -> True """
+        or_exprs, tags = self.get_compiled(name, tags)
+        
+        # or_exprs = [{'a'}, {'c'}, {'d', 'a'}, {'d', 'e'}]
+        return any(and_expr <= tags for and_expr in or_exprs)
+
+def CommentMatcherBooleanProposition(CommentMatcherSetLowercase):
+    """ can have 'a' or '!a' """
+    R = Re('([a-z])$|(![a-z])$', re.I)
+    
+    def compile_name(self, name):
+        try:
+            return tuple(map(str.lower, R.fullmatch(name).groups()))
+        except:
+            raise ValueError('when matching via "A" and "!A", can only have "Letter" or "!Letter"')
+    
+    def match(self, name, tags):
+        """ name='!a', tags=['a', 'c'] -> True """
+        name, tags = self.get_compiled(name, tags)
+        
+        def index_of_letter(l):
+            return ord(l) - ord('a')
+        
+        true_val, false_val = name
+        
+        if true_val:
+            return index_of_letter(true_val) in tags
+        else:
+            return index_of_letter(false_val) not in tags
+
+class CommentMatcherFullBoolean(CommentMatcherSetLowercase):
+    """
+    Can have 'a | b & c' or (a | b) & c
+    Beware: in xml, "&" is a special character, so replace it with "&amp;" or "& " with a space after.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.more_characters = set()
+    
+    def set_more_characters(self, more_characters):
+        self.more_characters = set(more_characters)
+        assert not set('&|!()') & self.more_characters, "cannot allow those charcters"
+    
+    @staticmethod
+    def test():
+        m = CommentMatcherFullBoolean()
+        
+        Tags = list(map(list, ['abc', 'ab', 'ac', 'bc', 'a', 'b', 'c', '']))
+        
+        def show(expr):
+            return [''.join(tags) for tags in Tags if m.match(expr, tags)]
+        
+        assert show('a & b') == ['abc', 'ab']
+        assert show('a | b') == ['abc', 'ab', 'ac', 'bc', 'a', 'b']
+        assert show('a & !b') == ['ac', 'a']
+        assert show('a | b & c') == ['abc', 'ab', 'ac', 'bc', 'a']
+        assert show('(a | b) & c') == ['abc', 'ac', 'bc']
+        
+        assert show('a & !b') == show('a & ! b')
+        assert show('a | b & c') == show('a|b&c')
+        assert show('a | b & c') == show('a | b & c')
+        assert show('a | b & c') == show('a | (b & c)')
+        assert show('(a | b) & c') == show('(a & c) | (b & c)')
+        assert show('(a | b) & c') == show('a & c | b & c')
+        
+        def assertRaise(expr):
+            try:
+                m.compile_name(expr)
+                ok = False
+            except:
+                ok = True
+            assert ok, f"expr {expr!r} should raise Exception"
+        
+        assertRaise('| b')
+        assertRaise('a || b')
+        assertRaise('!')
+        assertRaise('a | (b & c')
+    
+    class Node:
+        def __init__(self, op, *params):
+            self.op = op
+            self.params = params
+    
+    def compile_name(self, name):
+        """
+        expr: or_expr | ('|' or_expr)*
+        or_expr: and_expr | ('&' and_expr)*
+        and_expr: identifier | "(" expr ")"
+        identifier: [a-ZA-Z0-9_]* | self.more_characters
+        """
+        
+        # eg. name = a | hello & world | d & (e | f)
+        import unicodedata
+        
+        def lexer_cat(c):
+            cat = unicodedata.category(c)
+            return (
+                'I' if cat[0] == 'L' or c in '_' or cat == 'Nd' else
+                'P' if c in ('(', ')', '&', '|', '!') else
+                'I' if c in self.more_characters else
+                'S' if c == ' ' else throw(ValueError(f'Invalid character: {c}')))
+        
+        bits = []
+        Token = namedtuple('type', 'val')
+        for a,b in groupby(name, lexer_cat):
+            if a == 'S':
+                pass
+            elif a == 'P':
+                bits.extend(b)
+            else:
+                bits.append(''.join(b))
+        
+        # eg. bits = ['a', '|', 'hello', '&', 'world', '|', 'd', '&', '(', 'e', '|', 'f', ')']
+        
+        bits += ['$']
+        
+        try:
+            lexer_cat('$')
+            ok = False
+        except:
+            ok = True
+        assert ok, '$ should not be an allowed character'
+        
+        i = 0
+
+        binary = unary = Leaf = lambda x:x
+        Node = CommentMatcherFullBoolean.Node
+
+        def consume():
+            nonlocal i
+            i += 1
+            
+        def expect(tok):
+            nonlocal i
+            if bits[i] == tok:
+                i += 1
+            else:
+                raise ValueError
+            
+        def Eparser():
+            t = E()
+            expect("$")
+            return t
+
+        def E():
+            t = T()
+            while bits[i] == "|":
+                op = binary(bits[i])
+                consume()
+                t1 = T()
+                t = Node(op, t, t1)
+            return t
+        
+        def T():
+            t = F()
+            while bits[i] == '&':
+                op = binary(bits[i])
+                consume()
+                t1 = F()
+                t = Node(op, t, t1)
+            return t
+        
+        def F():
+            if lexer_cat(bits[i]) == 'I':
+                t = Leaf(bits[i])
+                consume()
+                return t
+            elif bits[i] == "(":
+                consume()
+                t = E()
+                expect(")")
+                return t
+            elif bits[i] == "!":
+                consume()
+                t = F()
+                return Node(unary("!"), t)
+            else:
+                raise ValueError
+        
+        return Eparser()
+                
+    def match(self, name, tags):
+        """ name="a | c & d", tags=['c', 'd'] -> True """
+        tree, tags = self.get_compiled(name, tags)
+        
+        def parse(node):
+            if not isinstance(node, CommentMatcherFullBoolean.Node):
+                return node in tags
+            else:
+                if node.op == '|':
+                    return any(parse(p) for p in node.params)
+                elif node.op == '&':
+                    return all(parse(p) for p in node.params)
+                elif node.op == '!':
+                    return not parse(node.params[0])
+                else:
+                    raise ValueError
+        
+        return parse(tree)
+        
+class CopyInfo:
+    """
+    Provides Matricule to Feuille mapping (Feuille = "124" if not SERIES else "a124")
+    """
+    def __init__(self):
+        self.Dict = DictCollection()
+        self.Matricule, self.Feuille = self.Dict.keylist('Matricule', 'Feuille')
+        
+        self.AnnotationInfo = namedtuple('Info', 'mark ticked')
+    
+    def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
+        """
+        returns all comment[name] that match for a student for that qid
+        matricule="123456", qid="2" -> ["a", "!b", "!d"]
+        given <comment name="A"> <comment name="!A"> <comment name="!B"> <comment name="!C"> <comment name="!D">
+        and 'a' and 'c' were ticked on the copy
+        """
+        raise ValueError('Abstract Method')
+    
+class DbCopyInfo(CopyInfo):
+    def __init__(self):
+        super().__init__()
+        
+        # self.CopyNumber = self.Dict.keylist('CopyNumber') # beware, Matricule -> CopyNumber may not be a bijection !
+        
+        self.projects_by_serie = OrderedDict(
+            (serie, AmcProject(AMC_PROJECT.format(serie=serie)))
+            for serie in (SERIES or [''])
+        )
+        
+        self.Dict[self.Matricule, 'to', self.Feuille] = {
+            mat: "{}{}".format(serie, sid) if serie else "{}".format(sid)
+            for serie, proj in self.projects_by_serie.items()
+            for mat, sid in proj.Dict[proj.Matricule, 'to', proj.AmcStudentId].items()
+        }
+        
+        if SERIES:
+            duplicates_mat = set()
+            mats = set()
+            for serie, proj in self.projects_by_serie.items():
+                for mat, sid in proj.Dict[proj.Matricule, 'to', proj.AmcStudentId].items():
+                    if mat in mats:
+                        duplicates_mat.add(mat)
+                    else:
+                        mats.add(mat)
+            assert not duplicates_mat, "students in multiple amc projects: {}".format(duplicates_mat)
+        
+    def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
+        """
+        returns all xml comment[name] that match for a student for that qid
+        matricule="123456", qid="2" -> ["a", "notb", "notd"]
+        given <comment name="A"> <comment name="notA"> <comment name="notB"> <comment name="notC"> <comment name="notD">
+        and 'a' and 'c' were ticked on the copy
+        """
+        
+        # for that matricule, find out which comments are ticked (eg. A, C)
+        
+        proj, sid = next((proj, proj.Matricule(matricule).to('AmcStudentId'))
+                          for proj in self.projects_by_serie.values()
+                          if proj.Matricule(matricule).exists('AmcStudentId'))
+        
+        source = faq.tag_source_for_qid(qid)
+        
+        # TODO: tags = source.tags_for_matricule(matricule)
+        
+        if isinstance(source, TagSourceAmcAnnotatedCopy):
+            # go in the db
+            QO_BASE = re.compile('^QO(\d+)$')
+            QO_BASE_FORMAT = 'QO{}'.format
+            QO_COMMENTS = re.compile('^QO(\d+)COMMENTS$')
+            QO_COMMENTS_FORMAT = 'QO{}COMMENTS'.format
+            
+            ZONE_BOX = 4
+            CaseToRatio = dict(proj.dbs['capture'].execute(f'''
+                select id_b, 1.0*black/total from capture_zone
+                where student=?
+                and type={ZONE_BOX}
+                and id_a=?
+                ''',
+                (proj.Matricule(matricule).to('AmcStudentId'),
+                proj.Dict('LatexQuestionName', QO_COMMENTS_FORMAT(qid)).to('AmcQuestionId'))
+            ))
+            # assert CaseToRatio.keys() == set(irange(1,11)) # here, corresponds to 7 (ABCDEFG) but we don't check that
+            
+            indices = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
+            # len(indices) can be any length, no Exception possible
+            
+            # eg. indices = [0, 2] meaning "a" and "c" ticked
+            
+            def letter_of_index(i):
+                """ 'a' -> 0 """
+                if not 0 <= i < 26:
+                    raise ValueError
+                return chr(ord('a') + i)
+            
+            tags = [letter_of_index(i) for i in indices]
+        
+        elif isinstance(source, TagSourceCsvImageAnnotate):
+            # TODO: move this code in class CsvImageAnnotateSource(TagSource)
+            
+            data = source.data_for_qid(qid)
+            
+            def basename(path):
+                return path.split('/')[-1]
+            
+            # for all known scan of student sid for that project, check if there are tags in csv
+            possibles_tags = [
+                data[img]
+                for img in map(basename, proj.dbs['capture'].execute('select src from capture_page where student=?', (sid,)))
+                if data.Img(img).exists('tags')
+            ]
+            
+            assert len(possibles_tags) == 1
+            
+            tags = possibles_tags[0]
+            
+        else:
+            raise ValueError
+        
+        matcher = faq.matcher_for_qid(qid)
+        
+        return [
+            comment_name
+            for comment_name in faq.info[qid] # comment_name in ['a', 'not a', 'c']
+            if matcher.match(comment_name, tags)
+        ]
+    
+# will be Deprecated in favor of xml source="ticked-csv"
+# Easier to go directly in db operation from amc, however, export csv may be much smaller in size
+# TODO: should look at the source as in DbCopyInfo
+class CsvCopyInfo(CopyInfo):
+    def __init__(self):
+        super().__init__()
+        
         with open(QUESTIONS_TICKED_FILE_CSV) as f:
             self.Copies = [{simplify_key(k):v for k,v in line.items()} for line in csv.DictReader(f)]
-        self.Matricule_to_CopyNumber = {c['A:MATRICULE']: c['COPIE'] for c in self.Copies}
-        self.CopyNumber_to_Matricule = {c['COPIE']: c['A:MATRICULE'] for c in self.Copies}
+        
+        self.CopyNumber = self.Feuille
+        
+        self.Dict[self.Matricule, 'to', self.CopyNumber] = {
+            c['A:MATRICULE']: c['COPIE'] for c in self.Copies
+        }
         
         QO_BASE = re.compile('^QO(\d+)$')
         
-        self.bla = defaultdict(dict)
-        Info = namedtuple('Info', 'mark ticked')
+        _bla = defaultdict(dict)
         for student in self.Copies:
             matricule, copy = student['A:MATRICULE'], student['COPIE']
             for column in filter(QO_BASE.match, student):
                 id = QO_BASE.match(column).group(1)
                 
                 try:
-                    self.bla[matricule][id] = Info(
+                    _bla[matricule][id] = self.AnnotationInfo(
                         mark = None if not COMPUTE_MARK else Mark.calculate_mark(Reader.read_ticked(student, column)),
                         ticked = {i for i,v in enumerate(Reader.read_ticked(student, column + 'COMMENTS'))
                                 if v})
                 except (Mark.TooManyTicks, Mark.NoTicks, Reader.EmptyValue) as e:
                     warning(e.__class__.__name__, f'Copy {copy}, matricule {matricule}, column {column}') # str(e))
                     # raise e
-            
-        self.Matricule_to_PdfPath = {}
+        
+        self.AnnotationsInfos = dict(_bla) # self.AnnotationsInfos[matricule]['1'].mark and .ticked
+        
+        Matricule_to_PdfPath = {}
         import os
         RE = re.compile('(\d+).*\.pdf$')
         for name in os.listdir(PDF_DIR or '.'):
             if RE.match(name):
                 number = int(RE.match(name).group(1))
-                matricule = self.CopyNumber_to_Matricule[str(number)]
+                matricule = self.CopyNumber(str(number)).to(self.Matricule)
                 path = name if PDF_DIR in ('.', '') else os.path.join(PDF_DIR, name)
-                self.Matricule_to_PdfPath[matricule] = path
-                
+                Matricule_to_PdfPath[matricule] = path
+        
+        self.PdfPath = self.Dict('PdfPath')
+        self.Dict[self.Matricule, 'to', self.PdfPath] = Matricule_to_PdfPath
+    
     def FindPdfForMatricule(self, matricule:(str,int)):
-        return self.Matricule_to_PdfPath[str(matricule)]
+        return self.Matricule(str(matricule)).to(self.PdfPath)
     
     def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
         """
         returns all comment[name] that match for a student for that qid
-        matricule="123456", qid="2" -> ["a", "notb", "notd"]
+        matricule="123456", qid="2" -> ["a", "!b", "!d"]
         given <comment name="A"> <comment name="notA"> <comment name="notB"> <comment name="notC"> <comment name="notD">
         and 'a' and 'c' were ticked on the copy
         """
-        indices = self.bla[matricule][qid].ticked # eg. {0, 2}
+        indices = self.AnnotationsInfos[matricule][qid].ticked # eg. {0, 2}
         
-        def index_of_letter(l):
-            """ 'a' -> 0 """
-            if not 'a' <= l <= 'z' or len(l) != 1:
-                raise ValueError('when matching via A and notA, can only have letters or notLetters.')
-            return ord(l) - ord('a')
+        assert all(0 <= i < 26 for i in indices)
+        
+        tags = [chr(ord('a') + i) for i in indices]
+        
+        source = faq.tag_source_for_qid(qid)
+        matcher = faq.matcher_for_qid(qid)
         
         return [
             comment_name
-            for comment_name in faq.info[qid] # eg. a, nota, notb, notc, notd
-            if not comment_name.startswith('not') and index_of_letter(comment_name) in indices
-            or comment_name.startswith('not') and index_of_letter(comment_name[3:]) not in indices
+            for comment_name in faq.info[qid] # comment_name in ['a', '!a', 'c']
+            if matcher.match(comment_name, tags)
         ]
+    
+class AmcProject:
+    def __init__(self, path):
+        self.dbs = {name:sqlite3.connect(f'{path}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
+        
+        self.xmldoc = ET.parse(f'{path}/options.xml')
+        try:
+            self.seuil = float(self.xmldoc.find('seuil').text)
+        except:
+            warning(f'project {path}: seuil not found in xml, default seuil used')
+            self.seuil = 0.35
+        
+        self.Dict = DictCollection()
+        self.AmcStudentId, self.Matricule = self.Dict.keylist('AmcStudentId', 'Matricule')
+        self.AmcQuestionId, self.LatexQuestionName = self.Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+    
+        self.Dict[self.AmcQuestionId, 'to', self.LatexQuestionName] = dict_int_key(
+            self.dbs['layout'].execute('''select question, name from layout_question'''))
+    
+        self.Dict[self.AmcStudentId, 'to', self.Matricule] = {
+            int(student): int(auto or manual)
+            for student, auto, manual in self.dbs['association'].execute('select student, auto, manual from association_association')
+        }
+
+class QOInfo:
+    
+    QO = Re('^QO(\d+)$')
+    QO_FORMAT = 'QO{}'.format
+    
+    QOANN = Re('^QANN(\d+)$')
+    QOANN_FORMAT = 'QANN{}'.format
+    
+    class CorrectorNoTick(Exception):
+        pass
+    
+    class CorrectorMultiTick(Exception):
+        pass
+
+    def __init__(self, project:AmcProject, exam:int, name:'QO1'):
+        assert self.QO.match(name)
+        self.project = project
+        self.exam = exam
+        self.name = name
+        self.qnum = int(self.QO.match(name).group(1))
+    
+    def correctionValue(self) -> 4:
+        if hasattr(self, '_correctionValue'):
+            return self._correctionValue
+        
+        D = DictCollection()
+        CaseToRatio = D['AnswerPoints', 'to', 'Ratio'] = dict(self.project.dbs['capture'].execute(f'''
+            select id_b, 1.0*black/total from capture_zone
+            where student=?
+            and type={ZONE_BOX}
+            and id_a=?
+            ''',
+            (self.exam,
+             self.project.LatexQuestionName(self.name).to(self.project.AmcQuestionId))
+        ))
+        assert CaseToRatio.keys() == set(irange(1,11))
+        points = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
+        if len(points) == 0:
+            raise QOInfo.CorrectorNoTick("no points ticked")
+        
+        if len(points) > 1:
+            raise QOInfo.CorrectorMultiTick("too much points ticked")
+        
+        self._correctionValue = points[0]
+        return self._correctionValue
+    
+    def correctionCommentsList(self) -> [0, 2, 3]:
+        if hasattr(self, '_correctionCommentsList'):
+            return self._correctionCommentsList
+        
+        AnswerAnnotate_to_Ratio = dict(self.project.dbs['capture'].execute(f'''
+            select id_b, 1.0*black/total from capture_zone
+            where student=?
+            and type={ZONE_BOX}
+            and id_a=?
+            ''',
+            (self.exam,
+             self.project.LatexQuestionName(self.QOANN_FORMAT(self.qnum)).to(self.project.AmcQuestionId))
+        ))
+        assert AnswerAnnotate_to_Ratio.keys() == set(irange(1,7)) # 7 annotations possible
+        annotations = [int(k)-1 for k,v in AnswerAnnotate_to_Ratio.items() if v >= self.seuil]
+        
+        self._correctionCommentsList = annotations
+        return self._correctionCommentsList
 
 skipLimit = itertools.count()
 countLimit = itertools.count()
 
-if False:
-    series_info = {serie_name: SerieInfo(serie_name) for serie_name in ('a','b')}
+faq = make_faq_info_from_file(CONFIG_XML)
+if SERIES:
+    series_info = {serie_name: SerieInfo(serie_name) for serie_name in SERIES}
 student_info = StudentInfo()
-copy_info = CopyInfo()
+copy_info = DbCopyInfo()
 
-warning('Matricule without copy: ' + ' '.join(
-    student['MATRICULE']
-    for student in student_info.Students
-    if student['MATRICULE'] not in copy_info.Matricule_to_CopyNumber
-))
+if any(not copy_info.Matricule(int(student['MATRICULE'])).exists('Feuille') for student in student_info.Students):
+    L = [int(student['MATRICULE']) for student in student_info.Students if not copy_info.Matricule(int(student['MATRICULE'])).exists(copy_info.Feuille)]
+    warning('Matricule without copy ({}): {}'.format(len(L), ' '.join(map(str,L))))
 
 for feuille, matricule, netid, prenom, nom in (
-    [['a0', '123456', 'test', 'John', 'Doe']] if TEST_COMMENTS else
-    (
-        (copy_info.Matricule_to_CopyNumber[student['MATRICULE']],
-            student['MATRICULE'],
+    [[SERIES[0] + '0' if SERIES else '0', '123456', 'test', 'John', 'Doe']] if TEST_COMMENTS else (
+        (copy_info.Matricule(int(student['MATRICULE'])).to('Feuille'),
+            int(student['MATRICULE']),
             student['NETID'],
             student.get('PRENOM', ''),
             student['NOM'])
         for student in student_info.Students
-        if student['MATRICULE'] in copy_info.Matricule_to_CopyNumber
-    ) if True else [] # TODO: (some) DB
-    ): # aaq for 4 # aq for 8 # ad for 14
+        if copy_info.Matricule(int(student['MATRICULE'])).exists('Feuille')
+    )): # aaq for 4 # aq for 8 # ad for 14
     # and (netid < 'aaq') -- (feuille in "a201", "b250", "a244", "b284")) -- "a21", "a279", "b208", "a87", "a295"))
     
     if FILTER_MATRICULE:
@@ -488,7 +1189,7 @@ for feuille, matricule, netid, prenom, nom in (
             continue
         elif isinstance(FILTER_MATRICULE, (tuple,list,set)) and not(int(matricule) in FILTER_MATRICULE):
             continue
-        elif is_regex(FILTER_MATRICULE) and not FILTER_MATRICULE.match(matricule):
+        elif is_regex(FILTER_MATRICULE) and not FILTER_MATRICULE.match(str(matricule)):
             continue
         elif hasattr(FILTER_MATRICULE, '__call__') and not FILTER_MATRICULE(int(matricule)):
             continue
@@ -516,9 +1217,10 @@ for feuille, matricule, netid, prenom, nom in (
     
     info('{: 4}'.format(currentCount + (SKIP_LIMIT or 0)), 'Creating', feuille, 'for', netid, matricule)
     
-    if USE_SERIE:
-        assert feuille.startswith('a') or feuille.startswith('b')
+    if SERIES:
+        assert feuille
         serie = feuille[0]
+        assert serie in SERIES
     
     mail = EmailMessage(
         HEADER,
@@ -538,7 +1240,7 @@ for feuille, matricule, netid, prenom, nom in (
                 ),
                 coms = '\n'.join(
                     "- {}".format(com.replace('\n', '\n  ')) # (com if '\n' not in com else com.replace('\n', '\n  ') + '\n')
-                    for tag in tags 
+                    for tag in tags
                     for com in [
                         faq.info[qid][tag] if not isinstance(faq.info[qid][tag], SerieSwitch) else
                         getattr(faq.info[qid][tag], serie) # will raise Error if serie is not Defined
@@ -563,25 +1265,27 @@ for feuille, matricule, netid, prenom, nom in (
         )
     )
     
-    if True:
+    pdf_filename_from_infos = '{} {} (Number {}).pdf'.format(
+        HEADER,
+        nom.upper() + ' ' + prenom,
+        feuille,
+    )
+    
+    if False:
         if TEST_COMMENTS:
             filenames = ['test.pdf']
         else:
             try:
                 base_name = HEADER.replace(' ', '-')
                 filenames = {
-                    '{} {} (Number {}).pdf'.format(
-                        HEADER,
-                        nom.upper() + ' ' + prenom,
-                        feuille,
-                    ): copy_info.FindPdfForMatricule(matricule)
+                    pdf_filename_from_infos: copy_info.FindPdfForMatricule(matricule)
                 }
             except KeyError as e:
                 warning("Can't find pdf", e.__class__.__name__, e)
                 continue
     else:
         if TEST_COMMENTS:
-            filenames = {i:'test.jpg' for i in (1,2,3,4,5)}
+            filenames = {i:'test.jpg' for i in irange(1, NUM_PAGES)}
         else:
             num_filename = [
                 (int(num),filename)
@@ -593,24 +1297,30 @@ for feuille, matricule, netid, prenom, nom in (
                 for num, filename in sorted(num_filename)
             )
     
-            assert set(num for num, filename in num_filename) == {1,2,3,4,5}
+            assert set(num for num, filename in num_filename) == set(irange(1, NUM_PAGES))
             assert set(filename.lower().endswith('.jpg') for num, filename in num_filename)
     
     if isinstance(filenames, dict):
-        files = OrderedDict()
-        for new_name, orig_name in filenames.items():
-            try:
-                with open(orig_name, 'rb') as f:
-                    files[new_name] = f.read()
-            except FileNotFoundError as e:
-                raise e
+        if MAKE_PDF:
+            mail.attach(pdf_filename_from_infos, img2pdf.convert(list(filenames.values())))
+        else:
+            files = OrderedDict()
+            for new_name, orig_name in filenames.items():
+                try:
+                    with open(orig_name, 'rb') as f:
+                        files[new_name] = f.read()
+                except FileNotFoundError as e:
+                    raise e
         
-        for name, content in files.items():
-            mail.attach(name, content)
+            for name, content in files.items():
+                mail.attach(name, content)
             
     else:
-        for name in filenames:
-            mail.attach_file(name)
+        if MAKE_PDF:
+            mail.attach(pdf_filename_from_infos, img2pdf.convert(filenames))
+        else:
+            for name in filenames:
+                mail.attach_file(name)
     
     if PRINT_MAIL:
         print('-- MAIL --\n', mail.message().as_string())

@@ -1,12 +1,11 @@
 import sqlite3
 import csv
 import re
+from re import compile as Re
 import xml.etree.ElementTree as ET
 
-Re = re.compile
-
 def irange(*args):
-    """ inclusiverange: irange(1,5) == range(1,6) """
+    """ inclusive_range: irange(1,5) == range(1,6) """
     r = range(*args)
     return range(r.start, r.stop + 1, r.step)
 
@@ -24,12 +23,7 @@ def error(*args):
 
 from collections import defaultdict
 
-def reverse_dict(D, check_uniq=False):
-    R = {y:x for x,y in D.items()}
-    if check_uniq and not(len(R) == len(D)):
-        raise ValueError('Not a bijection')
-    return R
-
+# Shared Class between amc_utils module
 class DictCollection:
     """
     Data = DictCollection()
@@ -49,11 +43,20 @@ class DictCollection:
     
     Data['Name', 'from', 'Matricule'] = {'123450': 'Jean', '123450': 'Marie'}
     Data['AmcStudentId', 'to', 'Name'] # TODO, BEWARE: modification
+    
+    Matricule('1111111').set('AmcStudentId', '666') # Matricule('111111').to('AmcStudentId') == '666'
     """
     
     def __init__(self, update_no_duplicates=False):
         self.dicts = {}
         self.update_no_duplicates = update_no_duplicates
+    
+    @staticmethod
+    def reverse_dict(D, check_uniq=False):
+        R = {y:x for x,y in D.items()}
+        if check_uniq and not(len(R) == len(D)):
+            raise ValueError('Not a bijection')
+        return R
     
     @staticmethod
     def _read_tup(tup:('a', 'action:from|to', 'b')):
@@ -104,7 +107,7 @@ class DictCollection:
         if (a,b) in self.dicts:
             return self.dicts[a,b]
         if (b,a) in self.dicts:
-            self.dicts[a,b] = reverse_dict(self.dicts[b,a])
+            self.dicts[a,b] = self.reverse_dict(self.dicts[b,a])
             return self.dicts[a,b]
         raise KeyError(' '.join(tup))
     
@@ -118,6 +121,22 @@ class DictCollection:
             if self.value is None:
                 raise ValueError('value must be given and not None')
             return self.dictcls[self.name, 'to', other][self.value]
+        
+        def exists(self, other):
+            if self.value is None:
+                raise ValueError('value must be given and not None')
+            return self.value in self.dictcls[self.name, 'to', other]
+        
+        def set(self, other, value):
+            if self.value is None:
+                raise ValueError('value must be given and not None')
+            self.dictcls[self.name, 'to', other][self.value] = value
+            
+            # delete reverse
+            a, b = self.dictcls._read_tup((self.name, 'to', other))
+            if (b,a) in self.dictcls.dicts:
+                del self.dictcls.dicts[b,a] # modification
+                # TODO: maybe just update self.dicts[b,a][self.value], but what if this introduces non bijection ?
         
         def __call__(self, value):
             return DictCollection.ColumnId(self.name, self.dictcls, value)
@@ -229,6 +248,9 @@ class QFInfo:
         return {'value': numberFinal, 'mantissa':number, 'exp':numberExp, 'sign': 0 if numberFinal == 0 else -1 if numberFinal < 0 else 1}
 
 class QOInfo:
+    QO = Re('^QO(\d+)$')
+    QO_FORMAT = 'QO{}'.format
+    
     class CorrectorNoTick(Exception):
         pass
     
@@ -236,13 +258,13 @@ class QOInfo:
         pass
 
     def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
-        assert QO.match(name)
+        assert self.QO.match(name)
         self.Dict = Dict
         self.dbs = dbs
         self.seuil = seuil
         self.exam = exam
         self.name = name
-        self.qnum = int(QO.match(name).group(1))
+        self.qnum = int(self.QO.match(name).group(1))
     
     def correctionValue(self) -> 4:
         if hasattr(self, '_correctionValue'):
@@ -471,7 +493,7 @@ with CSVAndXLWriter(OUT_FILE) as writer:
         # student_csv = f'.csv'
 
         dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
-
+        
         xmldoc = ET.parse(f'{proj}/options.xml')
 
         try:
