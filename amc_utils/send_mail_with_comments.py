@@ -10,26 +10,27 @@ import csv
 from pprint import pprint
 import itertools
 from itertools import groupby
-from collections import namedtuple
+from collections import namedtuple, Counter
 
 import django
 from django.conf import settings
 from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
 import xml.etree.ElementTree as ET
 
-HEADER        = 'PHYSH100 Examen Physique Janvier 2017-2018'
+HEADER        = 'PHYSS1001 Examen Physique Janvier 2017-2018'
 NUM_PAGES     = 5
-SEND_MAIL     = False # If False, no mail will be sent
+SEND_MAIL     = True # If False, no mail will be sent
 PRINT_MAIL    = False # If True, mail will be printed, not sent.
-TEST_COMMENTS = True # if True, 1 mail will be sent will all the contents of comments.xml
-TO_ONE_PERSON = 'rovdeynd@ulb.ac.be' # if present, all mails go to here
+TEST_COMMENTS = False # if True, 1 mail will be sent will all the contents of comments.xml
+TO_ONE_PERSON = '' # 'rovdeynd@ulb.ac.be' # if present, all mails go to here
 ALSO_TO       = '' # 'Guillaume.Tillema@ulb.ac.be' # if present, send also to here
 SEND_FROM     = 'rovdeynd@ulb.ac.be'
 COMPUTE_MARK  = False
 MAKE_PDF      = True
+MAKE_STATS    = None # 'stats.csv' # if not empty, path of .csv (or .xlsx) to store stats for each <question> in xml with number of times sent
 
 # Flow control
-MAX_EMAIL        = 1 # None means no limit, 1 for example can be used for testing (send only 1 mail).
+MAX_EMAIL        = None # None means no limit, 1 for example can be used for testing (send only 1 mail).
 SKIP_LIMIT       = None # None or 0 means begin at first student, otherwise, skip SKIP_LIMIT students.
 FILTER_MATRICULE = None # Default : None, can also be a int, or a list of int; or a function taking a int
 FILTER_NETID     = None # Default : None, can also be a netid, or a list of netid, or a regex, or a function taking a str
@@ -54,7 +55,7 @@ AMC_PROJECT = "generateurAMC_{serie}" # if series are used: {serie} will be repl
 ANNOTATE_CSV_PATH = "q{qid}-tags.csv"
 
 if SERIES:
-    assert all(Re('^\w.*\w|\w$').match(serie) for serie in SERIES), "Series must begin and end with"
+    assert all(Re('^\w(.*\w)?$').match(serie) for serie in SERIES), "Series must begin and end with"
     assert len(set(SERIES)) == len(SERIES), "No duplicates allowed in series"
 
 settings.configure(
@@ -224,12 +225,12 @@ class DictCollection:
         for n in args:
             D[n] = self(n)
 
-class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
+class SerieSwitch:
     """
-    SerieSwitch(
-        txt.format(m='m', R='R'),
-        txt.format(m='M', R='L'),
-    )
+    SerieSwitch([
+        "Hello {m}, I am {R}".format(m='m', R='R'),
+        "Hello {m}, I am {R}".format(m='M', R='L'),
+    ]) -> mapping = {'a': 'Hello m, I am R', 'b': 'Hello M, I am L'}
     
     SerieSwitch.from_dict_to_list(txt, {
         'h': ['h', 'L'],
@@ -244,10 +245,17 @@ class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
     )
     """
     
+    def __init__(self, L):
+        assert len(L) == len(SERIES)
+        self.mapping = dict(zip(SERIES, L))
+    
+    def text_for_serie(self, serie):
+        return self.mapping[serie]
+    
     @staticmethod
     def from_dict_to_list(txt, d):
         """ SerieSwitch.from_dict_to_list('hello {m}', {'m': ['m', 'M'], 'R': ['R', 'L']}) """
-        return SerieSwitch(*[
+        return SerieSwitch([
             txt.format(**{k:L[i] for k,L in d.items()})
             for i in range(len(SerieSwitch._fields))
         ])
@@ -255,7 +263,8 @@ class SerieSwitch(namedtuple('SerieSwitch', ['a', 'b'])):
     @staticmethod
     def from_kwargs_to_list(txt, *args, **kwargs): # beware: 'txt' not in kwargs
         """ SerieSwitch.from_dict_to_list('hello {m}', m=['m', 'M'], R=['R', 'L']}) """
-        if args: raise ValueError('No args')
+        if args:
+            raise ValueError('No args')
         return SerieSwitch.from_dict_to_list(txt, kwargs)
 
 class TagSource:
@@ -300,11 +309,11 @@ class FaqInfo:
         self.tags_sources = {}
         self.matchers = {}
         
-    def tag_source_for_qid(qid):
-        self.tags_sources[qid]
+    def tag_source_for_qid(self, qid):
+        return self.tags_sources[qid]
     
-    def matcher_for_qid(qid):
-        self.matchers = {}
+    def matcher_for_qid(self, qid):
+        return self.matchers[qid]
         
 def make_faq_info_from_file(filename:str) -> FaqInfo:
     from xml.dom.minidom import parse
@@ -521,30 +530,7 @@ def clean_ws(x):
     from textwrap import dedent
     return dedent(x.strip('\n'))
 
-# TODO: read messages_info from xml as <message-info>, has same formatting options as <comment> (syntax=)
-messages_info = {
-    "1": {
-        #'b128': clean_ws("""
-        #    Some text for b128 for question 1
-        #    Another line for b128
-        #""")
-    },
-    "2": {
-        #'b208':clean_ws("""
-        #    Some text for b208 for question 2
-        #"""),
-    },
-    "3": {},
-    "4": {},
-}
-
-#assert (
-    #set(feuille for question, D in messages_info.items() for feuille in D)
-    #<= set(feuille for feuille, in db_conn.execute('select feuille from student where feuille is not NULL'))
-#), str(
-    #set(feuille for question, D in messages_info.items() for feuille in D)
-    #- set(feuille for feuille, in db_conn.execute('select feuille from student where feuille is not NULL'))
-#)
+# TODO: add a way to send a mail to one student for one question, for example 'if qid=1 and feuille=b128: send "Hello"'
 
 def add_lf_if_nempty(x):
     return x + '\n' if x else x
@@ -656,7 +642,7 @@ class CommentMatcherMultiple(CommentMatcherSetLowercase):
     def match(self, name, tags):
         """ name="a c", tags=['a', 'c', 'd'] -> True """
         S, tags = self.get_compiled(name, tags)
-        return S <= tags
+        return bool(S & tags)
     
 class CommentMatcherMultipleOrAnd(CommentMatcherSetLowercase):
     def compile_name(self, name):
@@ -794,6 +780,8 @@ class CommentMatcherFullBoolean(CommentMatcherSetLowercase):
             ok = True
         assert ok, '$ should not be an allowed character'
         
+        assert all(bits)
+        
         i = 0
 
         binary = unary = Leaf = lambda x:x
@@ -834,7 +822,7 @@ class CommentMatcherFullBoolean(CommentMatcherSetLowercase):
             return t
         
         def F():
-            if lexer_cat(bits[i]) == 'I':
+            if lexer_cat(bits[i][0]) == 'I':
                 t = Leaf(bits[i])
                 consume()
                 return t
@@ -881,7 +869,7 @@ class CopyInfo:
         
         self.AnnotationInfo = namedtuple('Info', 'mark ticked')
     
-    def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
+    def make_tags(self, faq, matricule, qid) -> list:
         """
         returns all comment[name] that match for a student for that qid
         matricule="123456", qid="2" -> ["a", "!b", "!d"]
@@ -917,8 +905,20 @@ class DbCopyInfo(CopyInfo):
                     else:
                         mats.add(mat)
             assert not duplicates_mat, "students in multiple amc projects: {}".format(duplicates_mat)
-        
-    def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
+    
+    def img_filenames(self, matricule):
+        """
+        '132456' -> [(1, 'path1.jpg'), (2, 'path2.jpg'), (3, 'path3.jpg')]
+        """
+        proj, sid = next((proj, proj.Matricule(matricule).to('AmcStudentId'))
+                         for proj in self.projects_by_serie.values()
+                         if proj.Matricule(matricule).exists('AmcStudentId'))
+        return [
+            (int(num), filename.replace('%PROJET', proj.path))
+            for num, filename in proj.dbs['capture'].execute('select page, src from capture_page where student=? order by page', [sid])
+        ]
+    
+    def make_tags(self, faq, matricule, qid) -> list:
         """
         returns all xml comment[name] that match for a student for that qid
         matricule="123456", qid="2" -> ["a", "notb", "notd"]
@@ -940,8 +940,8 @@ class DbCopyInfo(CopyInfo):
             # go in the db
             QO_BASE = re.compile('^QO(\d+)$')
             QO_BASE_FORMAT = 'QO{}'.format
-            QO_COMMENTS = re.compile('^QO(\d+)COMMENTS$')
-            QO_COMMENTS_FORMAT = 'QO{}COMMENTS'.format
+            QO_COMMENTS = re.compile('^QANN(\d+)$')
+            QO_COMMENTS_FORMAT = 'QANN{}'.format
             
             ZONE_BOX = 4
             CaseToRatio = dict(proj.dbs['capture'].execute(f'''
@@ -955,7 +955,7 @@ class DbCopyInfo(CopyInfo):
             ))
             # assert CaseToRatio.keys() == set(irange(1,11)) # here, corresponds to 7 (ABCDEFG) but we don't check that
             
-            indices = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
+            indices = [int(k)-1 for k,v in CaseToRatio.items() if v >= proj.seuil]
             # len(indices) can be any length, no Exception possible
             
             # eg. indices = [0, 2] meaning "a" and "c" ticked
@@ -979,8 +979,8 @@ class DbCopyInfo(CopyInfo):
             # for all known scan of student sid for that project, check if there are tags in csv
             possibles_tags = [
                 data[img]
-                for img in map(basename, proj.dbs['capture'].execute('select src from capture_page where student=?', (sid,)))
-                if data.Img(img).exists('tags')
+                for img in (basename(path) for path, in proj.dbs['capture'].execute('select src from capture_page where student=?', (sid,)))
+                if img in data 
             ]
             
             assert len(possibles_tags) == 1
@@ -988,7 +988,7 @@ class DbCopyInfo(CopyInfo):
             tags = possibles_tags[0]
             
         else:
-            raise ValueError
+            raise ValueError('Unknown type: {}'.format(type(source)))
         
         matcher = faq.matcher_for_qid(qid)
         
@@ -1049,7 +1049,7 @@ class CsvCopyInfo(CopyInfo):
     def FindPdfForMatricule(self, matricule:(str,int)):
         return self.Matricule(str(matricule)).to(self.PdfPath)
     
-    def make_tags_for_matricule_and_question(self, faq, matricule, qid) -> list:
+    def make_tags(self, faq, matricule, qid) -> list:
         """
         returns all comment[name] that match for a student for that qid
         matricule="123456", qid="2" -> ["a", "!b", "!d"]
@@ -1073,6 +1073,7 @@ class CsvCopyInfo(CopyInfo):
     
 class AmcProject:
     def __init__(self, path):
+        self.path = path
         self.dbs = {name:sqlite3.connect(f'{path}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
         
         self.xmldoc = ET.parse(f'{path}/options.xml')
@@ -1159,6 +1160,41 @@ class QOInfo:
         self._correctionCommentsList = annotations
         return self._correctionCommentsList
 
+class StatsQuestionComments:
+    def __init__(self, path, faq):
+        assert path.endswith('.csv')
+        self.path = path
+        self.faq = faq
+        
+        self.D = defaultdict(Counter)
+        self.N = 0
+    
+    def close(self):
+        
+        def convert_comment(comment):
+            if isinstance(comment, SerieSwitch):
+                return comment.text_for_serie(SERIES[0])
+            else:
+                return comment
+        
+        assert self.N % len(self.faq.info) == 0
+        total = self.N // len(self.faq.info)
+        print(total)
+        with open(self.path, 'w') as f:
+            W = csv.writer(f)
+            W.writerow(('QID', 'TAG', 'COUNT')) #, 'CONTENT'))
+            for qid in self.faq.info:
+                for tag in faq.info[qid]:
+                    W.writerow((qid, tag, self.D[qid][tag])) # convert_comment(self.faq.info[qid][tag])))
+        
+    def update(self, qid, tags):
+        """
+        Will be called once per mail per qid, containing the tags for that mail for that qid
+        """
+        for tag in tags:
+            self.D[qid][tag] += 1
+        self.N += 1
+
 skipLimit = itertools.count()
 countLimit = itertools.count()
 
@@ -1168,9 +1204,12 @@ if SERIES:
 student_info = StudentInfo()
 copy_info = DbCopyInfo()
 
+if MAKE_STATS:
+    stats = StatsQuestionComments(MAKE_STATS, faq)
+
 if any(not copy_info.Matricule(int(student['MATRICULE'])).exists('Feuille') for student in student_info.Students):
     L = [int(student['MATRICULE']) for student in student_info.Students if not copy_info.Matricule(int(student['MATRICULE'])).exists(copy_info.Feuille)]
-    warning('Matricule without copy ({}): {}'.format(len(L), ' '.join(map(str,L))))
+    warning('Matricule without copy ({}): {}{}'.format(len(L), ' '.join(map(str, L[:5])), '...' * (len(L) > 5)))
 
 for feuille, matricule, netid, prenom, nom in (
     [[SERIES[0] + '0' if SERIES else '0', '123456', 'test', 'John', 'Doe']] if TEST_COMMENTS else (
@@ -1219,8 +1258,26 @@ for feuille, matricule, netid, prenom, nom in (
     
     if SERIES:
         assert feuille
-        serie = feuille[0]
+        serie = feuille[0] # current hack to get serie
         assert serie in SERIES
+    
+    if TEST_COMMENTS:
+        my_tags = {qid: list(faq.info[qid]) for qid in faq.info}
+    else:
+        my_tags = {qid: copy_info.make_tags(faq, matricule, qid) for qid in faq.info}
+    
+    if MAKE_STATS:
+        for qid in faq.info:
+            stats.update(qid, my_tags[qid])
+    
+    if SEND_MAIL + PRINT_MAIL == 0:
+        continue
+    
+    def convert_comment(comment):
+        if isinstance(comment, SerieSwitch):
+            return comment.text_for_serie(serie)
+        else:
+            return comment
     
     mail = EmailMessage(
         HEADER,
@@ -1232,27 +1289,15 @@ for feuille, matricule, netid, prenom, nom in (
             header=HEADER,
             feuille=feuille,
         ) + '\n\n' + '\n\n'.join(
-            'Le·la correcteur·trice de la question {qid} a laissé ces commentaires supplémentaires:\n{coms_perso}{coms}'.format(
+            'Le·la correcteur·trice de la question {qid} a laissé ces commentaires supplémentaires:\n{coms}'.format(
                 qid = qid,
-                coms_perso = (
-                    '- ' + messages_info[qid][feuille].replace('\n', '\n  ') + '\n'
-                    if feuille in messages_info[qid] else ''
-                ),
                 coms = '\n'.join(
-                    "- {}".format(com.replace('\n', '\n  ')) # (com if '\n' not in com else com.replace('\n', '\n  ') + '\n')
-                    for tag in tags
-                    for com in [
-                        faq.info[qid][tag] if not isinstance(faq.info[qid][tag], SerieSwitch) else
-                        getattr(faq.info[qid][tag], serie) # will raise Error if serie is not Defined
-                    ]
+                    "- {}".format(convert_comment(faq.info[qid][tag]).replace('\n', '\n  '))
+                    for tag in my_tags[qid]
                 )
             )
             for qid in faq.info
-            for tags in [
-                list(faq.info[qid]) if TEST_COMMENTS else
-                copy_info.make_tags_for_matricule_and_question(faq, matricule, qid)
-            ]
-            if (tags or feuille in messages_info[qid])
+            if my_tags[qid]
         ) + '\n\n' + '\n'.join([
             "Plus d'infos sur la FAQ de l'examen sur l'UV.",
             "Robert VANDEN EYNDE",
@@ -1265,18 +1310,17 @@ for feuille, matricule, netid, prenom, nom in (
         )
     )
     
-    pdf_filename_from_infos = '{} {} (Number {}).pdf'.format(
-        HEADER,
-        nom.upper() + ' ' + prenom,
-        feuille,
-    )
+    pdf_filename_from_infos = '{header} {long_name} ({matricule}) (Number {feuille}).pdf'.format(
+        header=HEADER,
+        long_name=nom.upper() + ' ' + prenom,
+        matricule=int(matricule),
+        feuille=feuille)
     
     if False:
         if TEST_COMMENTS:
             filenames = ['test.pdf']
         else:
             try:
-                base_name = HEADER.replace(' ', '-')
                 filenames = {
                     pdf_filename_from_infos: copy_info.FindPdfForMatricule(matricule)
                 }
@@ -1287,10 +1331,8 @@ for feuille, matricule, netid, prenom, nom in (
         if TEST_COMMENTS:
             filenames = {i:'test.jpg' for i in irange(1, NUM_PAGES)}
         else:
-            num_filename = [
-                (int(num),filename)
-                for num, filename in db_conn.execute('select num, filename from capture where feuille=?', [feuille])
-            ]
+            num_filename = copy_info.img_filenames(matricule)
+            assert len(num_filename) == NUM_PAGES
                             
             filenames = OrderedDict(
                 (f'page-{num}.jpg', filename)
@@ -1302,6 +1344,8 @@ for feuille, matricule, netid, prenom, nom in (
     
     if isinstance(filenames, dict):
         if MAKE_PDF:
+            if not all(map(os.path.exists, filenames.values())):
+                raise FileNotFoundError(next(f for f in filenames.values() if not os.path.exists(f)))
             mail.attach(pdf_filename_from_infos, img2pdf.convert(list(filenames.values())))
         else:
             files = OrderedDict()
@@ -1317,10 +1361,14 @@ for feuille, matricule, netid, prenom, nom in (
             
     else:
         if MAKE_PDF:
+            if not all(map(os.path.exists, filenames())):
+                raise FileNotFoundError(next(f for f in filenames if not os.path.exists(f)))
             mail.attach(pdf_filename_from_infos, img2pdf.convert(filenames))
         else:
             for name in filenames:
                 mail.attach_file(name)
+    
+    assert SEND_MAIL + PRINT_MAIL == 1
     
     if PRINT_MAIL:
         print('-- MAIL --\n', mail.message().as_string())
@@ -1328,7 +1376,10 @@ for feuille, matricule, netid, prenom, nom in (
     elif SEND_MAIL:
         n_send = mail.send()
     else:
-        n_send = 1
+        raise AssertionError
     
     if n_send != 1:
         warning('Not sent', feuille, 'for', netid, prenom, nom.upper())
+
+if MAKE_STATS:
+    stats.close()
