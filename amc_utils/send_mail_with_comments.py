@@ -11,6 +11,7 @@ from pprint import pprint
 import itertools
 from itertools import groupby
 from collections import namedtuple, Counter
+from functools import lru_cache
 
 import django
 from django.conf import settings
@@ -50,12 +51,11 @@ QUESTIONS_TICKED_FILE_CSV = 'ExamenJanvier2018Brut_numerical_values_refilled.csv
 SERIES = ('a', 'b') # if empty or None, implies only one project
 PDF_DIR = '.' # deprecated
 AMC_PROJECT = "generateurAMC_{serie}" # if series are used: {serie} will be replaced by for example "a" (see SERIES)
-# TODO: decide if project config should go in XML
-
 ANNOTATE_CSV_PATH = "q{qid}-tags.csv"
+# TODO: decide if paths should go in XML
 
 if SERIES:
-    assert all(Re('^\w(.*\w)?$').match(serie) for serie in SERIES), "Series must begin and end with"
+    assert all(Re('^\w(.*\w)?$').match(serie) for serie in SERIES), "Series must begin and end with letters"
     assert len(set(SERIES)) == len(SERIES), "No duplicates allowed in series"
 
 settings.configure(
@@ -275,22 +275,17 @@ class TagSourceAmcAnnotatedCopy(TagSource):
 
 class TagSourceCsvImageAnnotate(TagSource):
     
+    @lru_cache(None)
     def data_for_qid(self, qid):
-        if qid not in self._cache:
-            with open(ANNOTATE_CSV_PATH.format(qid=qid)) as f:
-                L = list(csv.reader(f))
-            
-            assert all(len(x) == 2 for x in L)
-            
-            self._cache[qid] = {
-                a: tuple(b.split())
-                for a,b in L
-            }
-            
-        return self._cache[qid]
-    
-    def __init__(self):
-        self._cache = {}
+        with open(ANNOTATE_CSV_PATH.format(qid=qid)) as f:
+            L = list(csv.reader(f))
+        
+        assert all(len(x) == 2 for x in L)
+        
+        return {
+            a: tuple(b.split())
+            for a,b in L
+        }
 
 from collections import OrderedDict, defaultdict
 class FaqInfo:
@@ -301,7 +296,7 @@ class FaqInfo:
     example:
     info = OrderedDict{ "1": OrderedDict{"accel": "L'accélération c'est cool."},
                         "2": OrderedDict{ "vf=0": "Pour que bille reste en contact.",
-                                        "nrj": "Attention" } }
+                                          "nrj": "Attention" } }
     info = OrderedDict{ "1": OrderedDict{ "vf=0": SerieSwitch("Hello A", "Hello B") } }
     """
     def __init__(self):

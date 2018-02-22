@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # coding: utf-8
 
 import re
@@ -7,13 +8,14 @@ from datetime import datetime, date, time, timedelta
 from itertools import filterfalse
 from collections import defaultdict
 
-IN_FILE = 'physique-ba2.txt'
+IN_FILE = 'all-exo.txt'
+GEHOL_FILE = 'all-3-sections-gehol.ics' # gehol-q2.ics'
 ASSISTANTS = 'watchi decrol mahrou tillema gernier dierick arnhem jvc vanden friob'.split()
 PREFIX_PER_ASSISTANT = {}
 DEFAULT_PREFIX = "TP"
-ALL_DURATION = '6h'
+ALL_DURATION = '2h'
 SEANCES = 'num' # empty meaning not present, 'num' meaning numbers, 'letters' meaning letters, 'mixed' meaning numbers and text
-GROUPS_PREFIXES = () # groups begin with a prefix, then a number
+GROUPS_PREFIXES = ('IrBi', 'IrCi', 'InGe', 'IrAr') # groups begin with a prefix, then possibly a number
 
 if SEANCES:
     SEANCES = {'letter': 'letters'}.get(SEANCES, SEANCES)
@@ -45,6 +47,8 @@ def convert_duration(string):
         return timedelta(hours=int(hour), minutes=int(minute or 0))
 
 DURATION = convert_duration(ALL_DURATION)
+
+import search_for_ics_gehol
 
 RE_LIST = (
     [DAY, HOUR, HOUR_FROM, HOUR_TO, DATE, WEEK_SHIFT]
@@ -94,7 +98,7 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
         elif r is DATE:
             day, month = int(m.group(1)), int(m.group(2))
         elif r is GROUP:
-            groups.append((m.group(1), int(m.group(2) or 1)))
+            groups.append((m.group(1), m.group(2)))
         elif r is SEANCE:
             seances.append(int(m.group(1)))
         elif r is ASSISTANT:
@@ -116,7 +120,7 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
     base_time = datetime(year, month, day, hour, minute) + delta
     
     if hour_end is not None:
-        assert DURATION == datetime.combine(base_time, time(hour_end, minute_end)) - base_time, "Duration must be {ALL_DURATION}"
+        assert DURATION == datetime.combine(base_time, time(hour_end, minute_end)) - base_time, f"Duration must be {ALL_DURATION}"
     
     if weekday is not None:
         assert base_time.weekday() == weekday
@@ -138,12 +142,21 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
         else:
             summary = f'{prefix} S{seance}'
         
+        if search_for_ics_gehol:
+            Devent = {
+                'DTSTART': f'{beg:%Y%m%dT%H%M%S}Z',
+                'DTEND': f'{end:%Y%m%dT%H%M%S}Z',
+                'SUMMARY': summary,
+            }
+            location = search_for_ics_gehol.find_matching_location(Devent, GEHOL_FILE)
+        else:
+            location = 'Gehol'
         
         text_bits_per_assistant[assistant].append(f"""
             BEGIN:VEVENT
             DTSTART:{beg:%Y%m%dT%H%M%S}Z
             DTEND:{end:%Y%m%dT%H%M%S}Z
-            LOCATION:Gehol
+            LOCATION:{location}
             SUMMARY:{summary}
             END:VEVENT
         """)
@@ -167,7 +180,6 @@ for assistant, text_bits in text_bits_per_assistant.items():
     
     outfile.write('\n'.join(
         remove_beginning_whitespace(line_string)
-        for line_string in
-        '\n'.join(text_bits).split('\n')
+        for line_string in '\n'.join(text_bits).split('\n')
         if line_string.strip()
     ) + '\n')
