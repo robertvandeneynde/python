@@ -16,6 +16,11 @@ DEFAULT_PREFIX = "TP"
 ALL_DURATION = '2h'
 SEANCES = 'num' # empty meaning not present, 'num' meaning numbers, 'letters' meaning letters, 'mixed' meaning numbers and text
 GROUPS_PREFIXES = ('IrBi', 'IrCi', 'InGe', 'IrAr') # groups begin with a prefix, then possibly a number
+ALL_ASSISTANTS = 'all-assistants.ics' # if not empty, name of ics file where all the assistants are merged
+
+if ALL_ASSISTANTS:
+    if ALL_ASSISTANTS.endswith('.ics'):
+        ALL_ASSISTANTS = ALL_ASSISTANTS[:-4]
 
 if SEANCES:
     SEANCES = {'letter': 'letters'}.get(SEANCES, SEANCES)
@@ -37,7 +42,7 @@ SEANCE = Re('S({})'.format({'num': '\d+', 'letters':'\w+', 'mixed':'[\d\w]+'}[SE
 ASSISTANT = Re('|'.join(map(re.escape, ASSISTANTS)), re.I)
 
 DURATION_RE = Re('(\d+)h(\d\d)?(min)?|(\d+)min')
-assert DURATION_RE.fullmatch(ALL_DURATION), '{ALL_DURATION} is not like "6h" or "6h30" or "5min"'
+assert DURATION_RE.fullmatch(ALL_DURATION), '"{ALL_DURATION}" is not like "6h" or "6h30" or "5min"'
 
 def convert_duration(string):
     hour, minute, _, single_minute = DURATION_RE.fullmatch(string).groups()
@@ -48,7 +53,11 @@ def convert_duration(string):
 
 DURATION = convert_duration(ALL_DURATION)
 
-import search_for_ics_gehol
+try:
+    import search_for_ics_gehol
+except ImportError:
+    print('[Warning] no module search_for_ics_gehol, locations will be empty')
+    search_for_ics_gehol = None
 
 RE_LIST = (
     [DAY, HOUR, HOUR_FROM, HOUR_TO, DATE, WEEK_SHIFT]
@@ -64,6 +73,8 @@ is_not_none = lambda x: x is not None
 
 def naive_to_utc(naive):
     return pytz.timezone('Europe/Brussels').localize(naive, is_dst=None).astimezone(pytz.utc)
+
+def printret(x): print(x): return x
 
 def convert(bit):
     M = [(r, r.fullmatch(bit)) for r in RE_LIST]
@@ -136,6 +147,9 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
         
         prefix = PREFIX_PER_ASSISTANT.get(assistant, DEFAULT_PREFIX)
         
+        if ALL_ASSISTANTS:
+            prefix = (prefix + ' ' + assistant).strip()
+        
         if GROUPS:
             grouptype, groupnum = groups[i]
             summary = f'{prefix} {grouptype}{groupnum} S{seance}'
@@ -161,11 +175,14 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
             END:VEVENT
         """)
 
-def remove_beginning_whitespace(line_string):
-    return re.sub('^\s+', '', line_string)
+if ALL_ASSISTANTS:
+    text_bits_per_assistant = {
+        ALL_ASSISTANTS: [text_bit for text_bits in text_bits_per_assistant.values()
+                                  for text_bit in text_bits]
+    }
 
 for assistant, text_bits in text_bits_per_assistant.items():
-  with open(f'{assistant}.ics', 'w') as outfile:
+  with open(printret(f'{assistant}.ics'), 'w') as outfile:
     text_bits.insert(0, '''
         BEGIN:VCALENDAR
         PRODID:-//Google Inc//Google Calendar 70.9054//EN
@@ -179,7 +196,7 @@ for assistant, text_bits in text_bits_per_assistant.items():
     ''')
     
     outfile.write('\n'.join(
-        remove_beginning_whitespace(line_string)
+        line_string.strip()
         for line_string in '\n'.join(text_bits).split('\n')
         if line_string.strip()
     ) + '\n')

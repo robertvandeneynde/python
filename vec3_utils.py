@@ -20,8 +20,8 @@ def tand(x):
 
 def polar(*args):
     """
-    polar(pi/6) -> (cosd(pi/6), sind(pi/6)) = vec2(0.86602539, 0.5)
-    polar(5, pi/6) -> (5 * cosd(pi/6), 5 * sind(pi/6)) = vec2(4.33012676, 2.5)
+    polar(pi/6) -> (cos(pi/6), sin(pi/6)) = vec2(0.86602539, 0.5)
+    polar(5, pi/6) -> (5 * cos(pi/6), 5 * sin(pi/6)) = vec2(4.33012676, 2.5)
     """
     if len(args) == 2:
         r,t = args
@@ -165,6 +165,11 @@ def PerspectiveMatrix(fovy, aspect, zNear, zFar):
         ])
 
 def TranslationMatrix(*args):
+    """
+    TranslationMatrix(x, y, z)
+    TranslationMatrix((x, y, z))
+    TranslationMatrix(x, y) # z = 0
+    """
     if len(args) == 3:
         tx,ty,tz = args
     elif len(args) == 2:
@@ -182,6 +187,10 @@ def TranslationMatrix(*args):
         ])
 
 def LookAtMatrix(*args):
+    """
+    LookAtMatrix((camera_x, camera_y, camera_z), (target_x, target_y, target_z), (up_x, up_y, up_z))
+    LookAtMatrix(camera_x, camera_y, camera_z, target_x, target_y, target_z, up_x, up_y, up_z)
+    """
     if len(args) == 3:
         e,c,ur = args
     elif len(args) == 9:
