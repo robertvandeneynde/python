@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
 import sqlite3
 import csv
 import re
 from re import compile as Re
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as XmlElement
+
+ZONE_BOX = 4
 
 def irange(*args):
     """ inclusive_range: irange(1,5) == range(1,6) """
@@ -12,14 +15,14 @@ def irange(*args):
 def dict_int_key(it):
     return {int(a):b for a,b in it}
 
-def warning(*args):
-    print('[Warning]', *args)
+def warning(*args): # orange
+    print('\033[33m' + 'Warning:', *args, '\033[0m')
     
-def info(*args):
-    print('[Info]', *args)
+def info(*args): # green
+    print('\033[32m' + 'Info:', *args, '\033[0m')
 
-def error(*args):
-    print('[Error]', *args)
+def error(*args): # error
+    print('\033[31m' + 'Error:', *args, '\033[0m')
 
 from collections import defaultdict
 
@@ -160,14 +163,17 @@ class DictCollection:
 class QFInfo:
     POLICIES = {'EmptyColumnMeansFirstTicked'} & {'EmptyColumnMeansFirstTicked', 'NoSignMeansPlus', 'MultipleTickMeansNoTick'} # set(args.policies)
     
-    class EmptyColumn(Exception):
+    class Error(Exception):
+        pass
+    
+    class EmptyColumn(Error):
         pass
 
-    class MultipleTicksInColumn(Exception):
+    class MultipleTicksInColumn(Error):
         pass
     
     def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
-        assert QFSerie.match(name)
+        assert StandardNames.QFSerie.fullmatch(name)
         self.Dict = Dict
         self.dbs = dbs
         self.seuil = seuil
@@ -175,6 +181,8 @@ class QFInfo:
         self.name = name
 
     def parseQF(self, *, base=10, policies=POLICIES) -> {'value':float, 'mantissa':float, 'exp':float, 'sign':int}:
+        
+        AmcQuestionId, LatexQuestionName = self.Dict.keylist('AmcQuestionId', 'LatexQuestionName')
         
         def parsePart(part:'digits|exp', expectedNumbers:3, *, base=base, hasSign=True, direction:'plus|minus'='plus'):
             """
@@ -187,15 +195,17 @@ class QFInfo:
             assert part in ('digits', 'exp') and direction in ('plus', 'minus')
             expectedBoxes = (2 if hasSign else 0) + expectedNumbers * base
             
-            CaseToRatio = dict(self.dbs['capture'].execute(f'''
-                select id_b, 1.0*black/total from capture_zone
-                where student=?
-                and type={ZONE_BOX}
-                and id_a=?
-                ''',
-                (self.exam,
-                self.Dict('LatexQuestionName', self.name + part).to('AmcQuestionId'))
-            ))
+            CaseToRatio = {
+                digit: ratio if manual == -1 else manual
+                for digit, ratio, manual in self.dbs['capture'].execute(f'''
+                    select id_b, 1.0*black/total, manual from capture_zone
+                    where student=?
+                    and type={ZONE_BOX}
+                    and id_a=?
+                    ''',
+                    (self.exam, LatexQuestionName(self.name + part).to(AmcQuestionId)))
+            }
+            assert all(0 <= v <= 1 for v in CaseToRatio.values())
             assert CaseToRatio.keys() == set(irange(1,expectedBoxes))
             
             Ticks = [int(v >= self.seuil) for k,v in CaseToRatio.items()]
@@ -248,45 +258,51 @@ class QFInfo:
         return {'value': numberFinal, 'mantissa':number, 'exp':numberExp, 'sign': 0 if numberFinal == 0 else -1 if numberFinal < 0 else 1}
 
 class QOInfo:
-    QO = Re('^QO(\d+)$')
-    QO_FORMAT = 'QO{}'.format
-    
-    class CorrectorNoTick(Exception):
+    class Error(Exception):
         pass
     
-    class CorrectorMultiTick(Exception):
+    class CorrectorNoTick(Error):
+        pass
+    
+    class CorrectorMultiTick(Error):
         pass
 
     def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
-        assert self.QO.match(name)
+        assert StandardNames.QO.fullmatch(name)
         self.Dict = Dict
         self.dbs = dbs
         self.seuil = seuil
         self.exam = exam
         self.name = name
-        self.qnum = int(self.QO.match(name).group(1))
+        self.qnum = int(self.QO.fullmatch(name).group(1))
     
     def correctionValue(self) -> 4:
         if hasattr(self, '_correctionValue'):
             return self._correctionValue
         
-        D = DictCollection()
-        CaseToRatio = D['AnswerPoints', 'to', 'Ratio'] = dict(self.dbs['capture'].execute(f'''
-            select id_b, 1.0*black/total from capture_zone
-            where student=?
-            and type={ZONE_BOX}
-            and id_a=?
-            ''',
-            (self.exam,
-             self.Dict('LatexQuestionName', self.name).to('AmcQuestionId'))
-        ))
+        AmcQuestionId, LatexQuestionName = self.Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+        
+        CaseToRatio = {
+            digit: ratio if manual == -1 else manual
+            for digit, ratio, manual in self.dbs['capture'].execute(f'''
+                select id_b, 1.0*black/total, manual from capture_zone
+                where student=?
+                and type={ZONE_BOX}
+                and id_a=?
+                ''',
+                (self.exam,
+                LatexQuestionName(self.name).to(AmcQuestionId)))
+        }
+        assert all(0 <= v <= 1 for v in CaseToRatio.values())
+        
         assert CaseToRatio.keys() == set(irange(1,11))
+        
         points = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
         if len(points) == 0:
-            raise QOInfo.CorrectorNoTick("no points ticked")
+            raise self.CorrectorNoTick("no points ticked")
         
         if len(points) > 1:
-            raise QOInfo.CorrectorMultiTick("too much points ticked")
+            raise self.CorrectorMultiTick("too much points ticked")
         
         self._correctionValue = points[0]
         return self._correctionValue
@@ -295,20 +311,80 @@ class QOInfo:
         if hasattr(self, '_correctionCommentsList'):
             return self._correctionCommentsList
         
-        AnswerAnnotate_to_Ratio = dict(self.dbs['capture'].execute(f'''
-            select id_b, 1.0*black/total from capture_zone
-            where student=?
-            and type={ZONE_BOX}
-            and id_a=?
-            ''',
-            (self.exam,
-             self.Dict('LatexQuestionName', QOANN_FORMAT(self.qnum)).to('AmcQuestionId'))
-        ))
+        LatexQuestionName, AmcQuestionId = self.Dict.keylist('LatexQuestionName', 'AmcQuestionId')
+        
+        AnswerAnnotate_to_Ratio = {
+            digit: ratio if manual == -1 else manual
+            for digit, ratio, manual in self.dbs['capture'].execute(f'''
+                select id_b, 1.0*black/total, manual from capture_zone
+                where student=?
+                and type={ZONE_BOX}
+                and id_a=?
+                ''',
+                (self.exam,
+                LatexQuestionName(StandardNames.QOANN_FORMAT(self.qnum)).to(AmcQuestionId)))
+        }
         assert AnswerAnnotate_to_Ratio.keys() == set(irange(1,7)) # 7 annotations possible
         annotations = [int(k)-1 for k,v in AnswerAnnotate_to_Ratio.items() if v >= self.seuil]
         
         self._correctionCommentsList = annotations
         return self._correctionCommentsList
+    
+class QMatriculeInfo:
+    class Error(Exception):
+        pass
+    
+    class StudentNoTick(Error):
+        pass
+    
+    class StudentMultiTick(Error):
+        pass
+
+    def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int):
+        self.Dict = Dict
+        self.dbs = dbs
+        self.seuil = seuil
+        self.exam = exam
+    
+    def matriculeValue(self) -> str:
+        if hasattr(self, '_matriculeValue'):
+            return self._matriculeValue
+        
+        AmcQuestionId, LatexQuestionName = self.Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+        
+        matricule_list = []
+        for nmatr in reversed(irange(1,6)):
+            CaseToRatio = {
+                digit: ratio if manual == -1 else manual
+                for digit, ratio, manual in self.dbs['capture'].execute(f'''
+                    select id_b, 1.0*black/total, manual from capture_zone
+                    where student=?
+                    and type={ZONE_BOX}
+                    and id_a=?
+                    ''',
+                    (self.exam,
+                    LatexQuestionName(StandardNames.QMAT_FORMAT(nmatr)).to(AmcQuestionId)))
+            }
+                    
+            assert all(0 <= v <= 1 for v in CaseToRatio.values())
+
+            assert CaseToRatio.keys() == set(irange(1,10)), 'When reading digit zmatr[{nmatr}], with student {self.exam}, found {} keys: {}'.format(
+                len(CaseToRatio.keys()), list(CaseToRatio.keys()), nmatr=nmatr, self=self)
+            
+            points = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
+            
+            if len(points) == 0:
+                raise self.StudentNoTick("no points ticked")
+            
+            if len(points) > 1:
+                raise self.StudentMultiTick("too much points ticked")
+            
+            matricule_list.append(points[0])
+        
+        assert len(matricule_list) == 6, "matricule must have exactly 6 digits"
+        
+        self._matriculeValue = ''.join(map(str, matricule_list))
+        return self._matriculeValue
 
 class ReadFromAnnotate:
     def __init__(self, annotate_csv_file):
@@ -329,6 +405,10 @@ class ReadFromMatriculeMarkCsv:
 
 class XLWriter:
     def __init__(self, filename):
+        import os
+        if os.path.splitext(filename)[1] == '':
+            filename += '.xlsx'
+        assert filename.endswith('.xlsx')
         import openpyxl
         self.filename = filename
         self.wb = openpyxl.Workbook()
@@ -347,8 +427,12 @@ class XLWriter:
 
 class CSVWriter:
     def __init__(self, filename):
+        import os
+        if os.path.splitext(filename)[1] == '':
+            filename += '.csv'
+        assert filename.endswith('.csv')
         self.filename = filename
-        self.f = open(filename, 'w')
+        self.f = open(filename, 'w', endline='')
         self.writer = csv.writer(self.f)
         
     def writerow(self, row):
@@ -402,177 +486,309 @@ class PrintWriter:
     
     def __exit__(self, type, value, traceback):
         pass
+    
+class StandardNames:
+    QO = Re('^QO(\d+)$')
+    QO_FORMAT = 'QO{}'.format
+    
+    QFSerie = Re('^QF(?P<num>\d+)(?P<serie>\w)$')
+    QFSerieFormat = 'QF{num}{serie}'.format
+    QFDigits = Re('^QF(?P<num>\d+)(?P<serie>\w)(?P<part>digits|exp)$')
+    QFDigitsFormat = 'QF{num}{serie}{part}'.format
+    
+    QOANN = Re('^QANN(\d+)$')
+    QOANN_FORMAT = 'QANN{}'.format
+    
+    QMAT = Re('^zmatr[\d+]$')
+    QMAT_FORMAT = 'zmatr[{}]'.format
 
-if __name__ != '__main__':
-    import sys
-    sys.exit(0)
+def DoAssociationAuto(SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+    assert len(set(map(str.lower, SERIES))) == len(SERIES), "no duplicates in series !"
 
-OUT_FILE = 'lolilol.csv'
-assert OUT_FILE.endswith('.csv')
-
-QO = Re('^QO(\d+)$')
-QO_FORMAT = 'QO{}'.format
-
-QFSerie = Re('^QF(?P<num>\d+)(?P<serie>\w)$')
-QFSerieFormat = 'QF{num}{serie}'.format
-QFDigitsReg = Re('^QF(?P<num>\d+)(?P<serie>\w)(?P<part>digits|exp)$')
-QFDigitsFormat = 'QF{num}{serie}{part}'.format
-
-QOANN = Re('^QANN(\d+)$')
-QOANN_FORMAT = 'QANN{}'.format
-
-ZONE_BOX = 4
-
-SERIES = ('A', 'B')
-PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
-
-question_formats = {
-    # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
-}
-
-qf_answers = { # list of [value, min, max, -points minus]
-    'QF5a': [
-        [7.81e-1, 7.71e-1, 7.81e-1, 0],
-        [1.56, 1.54, 1.58, -1]
-    ],
-    'QF6a': [
-        [-3.32e-9, 3.22e-9, 3.42e-9, 0],
-        [-375, 371, 379, -1],
-    ],
-    'QF7a': [
-        [1.33e-8, 1.23e-8, 1.43e-8, 0],
-        [5.32e-8, 5.3e-8, 5.34e-8, -3],
-        [2.66e-8, 2.64e-8, 2.68e-8, -3]
-    ],
-    'QF8a': [
-        [2.5, 2.4, 2.6, 0],
-    ],
-    'QF5b': [
-        [1.53, 1.43, 1.63, 0],
-        [3.06, 3.04, 3.08, -1]
-    ],
-    'QF6b': [
-        [-5.53e-9, 5.43e-9, 5.63e-9, 0],
-        [625, 621, 629, -1]
-    ],
-    'QF7b': [
-        [1.18e-8, 1.08e-8, 1.28e-8, 0],
-        [2.36e-8, 2.34e-8, 2.38e-8, -3],
-        [3.54e-8, 3.52e-8, 3.56e-8, -3],
-        [1.77e-8, 1.75e-8, 1.79e-8, -3],
-    ],
-    'QF8b': [
-        [1.41, 1.31, 1.51, 0],
-    ],
-}
-
-assert all(len(L) > 0 for L in qf_answers.values())
-assert all(len(X) == 4 for L in qf_answers.values() for X in L)
-assert all(minus == 0 for L in qf_answers.values() for i,(value, m, M, minus) in enumerate(L) if i == 0)
-assert all(minus <= 0 for L in qf_answers.values() for value, m, M, minus in L)
-
-# TODO: assert no overlap : assert all(map(no_overlap, qf_answers.values()))
-
-qf_policies = {
-    'QF5a': set(),
-    'QF6a': set(), # {'SignMinus1'},
-    'QF7a': set(),
-    'QF8a': set(),
-    'QF5b': set(),
-    'QF6b': set(), # {'SignMinus1'},
-    'QF7b': set(),
-    'QF8b': set(),
-}
-
-assert all(X <= {'SignMinus1'} for X in qf_policies.values())
-
-with CSVAndXLWriter(OUT_FILE) as writer:
-    writer.writerow(('COPIE','MATRICULE','QUESTION','MARK','ANNOTATION','COMMENTS'))
+    to_commit = []
     for serie in SERIES:
-        proj = PROJ_NAME_FROM_SERIE(serie)
-        # student_csv = f'.csv'
-
+        proj = PROJ_NAME_WITH_SERIE_FORMAT.format(serie=serie)
         dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
         
-        xmldoc = ET.parse(f'{proj}/options.xml')
-
+        xmldoc = XmlElement.parse(f'{proj}/options.xml')
         try:
             seuil = float(xmldoc.find('seuil').text)
         except:
-            warning(f'serie {serie}: seuil not found in xml, default seuil used')
             seuil = 0.35
+            warning(f'serie {serie}: seuil not found in xml, default seuil of {seuil} used')
         
         Dict = DictCollection()
         
-        AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
         AmcQuestionId, LatexQuestionName = Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+        AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
         
         Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
             dbs['layout'].execute('''select question, name from layout_question'''))
+        
+        Mapping = []
+        
+        for student, in dbs['capture'].execute('select distinct student from capture_zone'):
+            info = QMatriculeInfo(Dict, dbs, seuil, student)
+            try:
+                Mapping.append((student, info.matriculeValue()))
+            except QMatriculeInfo.Error as e:
+                warning(serie, student, e.__class__.__name__)
+        
+        assert set(x for x, in dbs['capture'].execute('select distinct copy from capture_page').fetchall()) <= {0}, f'In {proj}: Multiple copies are not allowed'
+        
+        current_records = int(dbs['association'].execute('select count(*) from association_association').fetchone()[0])
+        assert current_records == 0, f'In {proj}: association_association must be empty but {current_records} records found'
+        
+        dbs['association'].executemany('''
+            insert into association_association(student,copy,manual,auto)
+            values (?,0,NULL,?)''', Mapping)
+        to_commit.append(dbs['association'])
+    
+    for db in to_commit:
+        db.commit()
 
+def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+    try:
+        import openpyxl
+        Writer = XLWriter
+    except ImportError:
+        warning('openpyxl not installed, no xlsx generated.')
+        Writer = CSVWriter
+        
+    with Writer('all_answers') as writer, Writer('frequencies') as other_writer:
+      for serie in SERIES:
+        proj = PROJ_NAME_WITH_SERIE_FORMAT.format(serie=serie)
+        dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
+        
+        xmldoc = XmlElement.parse(f'{proj}/options.xml')
+        try:
+            seuil = float(xmldoc.find('seuil').text)
+        except:
+            seuil = 0.35
+            warning(f'serie {serie}: seuil not found in xml, default seuil of {seuil} used')
+        
+        Dict = DictCollection()
+        
+        AmcQuestionId, LatexQuestionName = Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+        AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
+        
+        Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
+            dbs['layout'].execute('''select question, name from layout_question'''))
+        
         Dict[AmcStudentId, 'to', Matricule] = {
             int(student): int(auto or manual)
             for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association')
         }
-
+        
+        firstrow = ['examfull', 'matricule']
+        
+        qf_names = []
         for latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].values():
-            for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
-                examfull = "{}{}".format(serie, exam)
-                comments = ''
-                if QFDigitsReg.match(latexname) and QFDigitsReg.match(latexname).group('part') == 'digits': # latexname = QF5digits
-                    m = QFDigitsReg.match(latexname).groupdict()
-                    basename = QFDigitsFormat(part='', num=m['num'], serie=m['serie']) # basename = QF5a
-                    info = QFInfo(Dict, dbs, seuil, exam, basename)
+            qf_match = StandardNames.QFDigits.fullmatch(latexname)
+            if qf_match and qf_match.group('part') == 'digits':
+                m = qf_match.groupdict()
+                basename = StandardNames.QFDigitsFormat(part='', num=m['num'], serie=m['serie'])
+                qf_names.append(basename)
+        qf_names.sort()
+        
+        for basename in qf_names:
+            firstrow.extend([basename + '_' + x for x in ('value', 'mantissa', 'exp', 'sign')])
+        
+        writer.writerow(firstrow)
+        
+        from collections import defaultdict, Counter
+        aggreg = defaultdict(Counter)
+        
+        for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
+            examfull = "{}{}".format(serie, exam)
+            row = [examfull, matricule]
+            for basename in qf_names:
+                info = QFInfo(Dict, dbs, seuil, exam, basename)
+                
+                try:
+                    values = info.parseQF()
+                    value = values['value'] # values['mantissa'], values['exp'], values['sign']
+                    row.extend((values['value'], values['mantissa'], values['exp'], values['sign']))
                     
-                    try:
-                        values = info.parseQF()
-                        value = values['value'] # values['mantissa'], values['exp'], values['sign']
+                    aggreg[basename][value] += 1
+                    
+                except QFInfo.MultipleTicksInColumn:
+                    warning(examfull, matricule, basename, 'MultipleTicksInColumn')
+                    row.extend(('MultipleTicksInColumn', ) * 4)
+            
+            writer.writerow(row)
+        
+        # other_writer
+        from pprint import pprint
+        from functools import partial
+        for key, agg in aggreg.items():
+            other_writer.writerow([key])
+            revsorted = partial(sorted, reverse=True)
+            for row in revsorted((y,x) for x,y in agg.items()):
+                other_writer.writerow(row)
+    
+    globals()['info']('Created', other_writer.filename)
+    globals()['info']('Created', writer.filename)
+    
+
+if __name__ == '__main__':
+
+    OUT_FILE = 'lolilol.csv'
+    assert OUT_FILE.endswith('.csv')
+
+    SERIES = ('A', 'B')
+    PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
+    
+    assert len(set(map(str.lower, SERIES))) == len(SERIES), f"no duplicates in series, got {SERIES}"
+    
+    question_formats = {
+        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
+    }
+
+    qf_answers = { # list of [value, min, max, -points minus]
+        'QF5a': [
+            [7.81e-1, 7.71e-1, 7.81e-1, 0],
+            [1.56, 1.54, 1.58, -1]
+        ],
+        'QF6a': [
+            [-3.32e-9, 3.22e-9, 3.42e-9, 0],
+            [-375, 371, 379, -1],
+        ],
+        'QF7a': [
+            [1.33e-8, 1.23e-8, 1.43e-8, 0],
+            [5.32e-8, 5.3e-8, 5.34e-8, -3],
+            [2.66e-8, 2.64e-8, 2.68e-8, -3]
+        ],
+        'QF8a': [
+            [2.5, 2.4, 2.6, 0],
+        ],
+        'QF5b': [
+            [1.53, 1.43, 1.63, 0],
+            [3.06, 3.04, 3.08, -1]
+        ],
+        'QF6b': [
+            [-5.53e-9, 5.43e-9, 5.63e-9, 0],
+            [625, 621, 629, -1]
+        ],
+        'QF7b': [
+            [1.18e-8, 1.08e-8, 1.28e-8, 0],
+            [2.36e-8, 2.34e-8, 2.38e-8, -3],
+            [3.54e-8, 3.52e-8, 3.56e-8, -3],
+            [1.77e-8, 1.75e-8, 1.79e-8, -3],
+        ],
+        'QF8b': [
+            [1.41, 1.31, 1.51, 0],
+        ],
+    }
+
+    assert all(len(L) > 0 for L in qf_answers.values())
+    assert all(len(X) == 4 for L in qf_answers.values() for X in L)
+    assert all(minus == 0 for L in qf_answers.values() for i,(value, m, M, minus) in enumerate(L) if i == 0)
+    assert all(minus <= 0 for L in qf_answers.values() for value, m, M, minus in L)
+
+    # TODO: assert no overlap : assert all(map(no_overlap, qf_answers.values()))
+
+    qf_policies = {
+        'QF5a': set(),
+        'QF6a': set(), # {'SignMinus1'},
+        'QF7a': set(),
+        'QF8a': set(),
+        'QF5b': set(),
+        'QF6b': set(), # {'SignMinus1'},
+        'QF7b': set(),
+        'QF8b': set(),
+    }
+
+    assert all(X <= {'SignMinus1'} for X in qf_policies.values())
+
+    with CSVAndXLWriter(OUT_FILE) as writer:
+        writer.writerow(('COPIE','MATRICULE','QUESTION','MARK','ANNOTATION','COMMENTS'))
+        for serie in SERIES:
+            proj = PROJ_NAME_FROM_SERIE(serie)
+            # student_csv = f'.csv'
+
+            dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
+            
+            xmldoc = XmlElement.parse(f'{proj}/options.xml')
+
+            try:
+                seuil = float(xmldoc.find('seuil').text)
+            except:
+                seuil = 0.35
+                warning(f'serie {serie}: seuil not found in xml, default seuil {seuil} used')
+            
+            Dict = DictCollection()
+            
+            AmcStudentId, Matricule = Dict.keylist('AmcStudentId', 'Matricule')
+            AmcQuestionId, LatexQuestionName = Dict.keylist('AmcQuestionId', 'LatexQuestionName')
+            
+            Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
+                dbs['layout'].execute('''select question, name from layout_question'''))
+
+            Dict[AmcStudentId, 'to', Matricule] = {
+                int(student): int(auto or manual)
+                for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association')
+            }
+
+            for latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].values():
+                for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
+                    examfull = "{}{}".format(serie, exam)
+                    comments = ''
+                    qf_match = StandardNames.QFDigits.fullmatch(latexname) 
+                    if qf_match and qf_match.group('part') == 'digits': # latexname = QF5digits
+                        m = qf_match.groupdict()
+                        basename = StandardNames.QFDigitsFormat(part='', num=m['num'], serie=m['serie']) # basename = QF5a
+                        info = QFInfo(Dict, dbs, seuil, exam, basename)
                         
-                        mark = 0
-                        for answer, themin, themax, minus in qf_answers[basename]:
-                            answer_sign = (0 if answer == 0 else 1 if answer > 0 else -1)
-                            
-                            if themin <= abs(value) <= themax:
-                                m = 5
-                            elif any(themin * 10 ** i <= abs(value) <= themax * 10 ** i for i in irange(-20,20)):
-                                m = 3
-                            else:
-                                m = 0
-                            if 'SignMinus1' in qf_policies[basename] and values['sign'] != answer_sign:
-                                m -= 1
-                            if minus:
-                                assert minus < 0
-                                m += minus
-                            if m < 0:
-                                m = 0
-                            mark = max(m, mark)
-                            if mark:
-                                break # TakeFirstAnswerGivingMarks
-                            
-                        comments = (values, qf_answers[basename])
-                        annotations = [] # TODO ?
-                    except QFInfo.MultipleTicksInColumn:
-                        warning(examfull, matricule, basename, 'MultipleTicksInColumn')
-                        mark = 0
-                            
-                elif QO.match(latexname):
-                    basename = latexname
-                    if latexname in question_formats:
-                        fmt = question_formats[latexname]
-                        if isinstance(fmt, ReadFromMatriculeMarkCsv):
-                            mark = fmt.Matricule(matricule).to(fmt.Mark)
-                            annotations = [] # TODO
-                        else:
-                            error("{}{}".format(serie, exam), matricule, latexname, 'UnknownQuestionFormat')
-                            continue
-                    else: # FromScannedAnnotationsAndMark
                         try:
-                            info = QOInfo(Dict, dbs, seuil, exam, latexname)
-                            mark = info.correctionValue()
-                            annotations = info.correctionCommentsList()
-                        except (QOInfo.CorrectorMultiTick, QOInfo.CorrectorNoTick) as e:
-                            error(examfull, matricule, basename, e.__class__.__name__)
-                            continue
-                else:
-                    continue
-                writer.writerow((examfull, matricule, basename, mark, ''.join(chr(ord('A') + i) for i in annotations), str(comments)))
+                            values = info.parseQF()
+                            value = values['value'] # values['mantissa'], values['exp'], values['sign']
+                            
+                            mark = 0
+                            for answer, themin, themax, minus in qf_answers[basename]:
+                                answer_sign = (0 if answer == 0 else 1 if answer > 0 else -1)
+                                
+                                if themin <= abs(value) <= themax:
+                                    m = 5
+                                elif any(themin * 10 ** i <= abs(value) <= themax * 10 ** i for i in irange(-20,20)):
+                                    m = 3
+                                else:
+                                    m = 0
+                                if 'SignMinus1' in qf_policies[basename] and values['sign'] != answer_sign:
+                                    m -= 1
+                                if minus:
+                                    assert minus < 0
+                                    m += minus
+                                if m < 0:
+                                    m = 0
+                                mark = max(m, mark)
+                                if mark:
+                                    break # TakeFirstAnswerGivingMarks
+                                
+                            comments = (values, qf_answers[basename])
+                            annotations = [] # TODO ?
+                        except QFInfo.MultipleTicksInColumn:
+                            warning(examfull, matricule, basename, 'MultipleTicksInColumn')
+                            mark = 0
+                                
+                    elif StandardNames.QO.fullmatch(latexname):
+                        basename = latexname
+                        if latexname in question_formats:
+                            fmt = question_formats[latexname]
+                            if isinstance(fmt, ReadFromMatriculeMarkCsv):
+                                mark = fmt.Matricule(matricule).to(fmt.Mark)
+                                annotations = [] # TODO
+                            else:
+                                error("{}{}".format(serie, exam), matricule, latexname, 'UnknownQuestionFormat')
+                                continue
+                        else: # FromScannedAnnotationsAndMark
+                            try:
+                                info = QOInfo(Dict, dbs, seuil, exam, latexname)
+                                mark = info.correctionValue()
+                                annotations = info.correctionCommentsList()
+                            except QOInfo.Error as e:
+                                error(examfull, matricule, basename, e.__class__.__name__)
+                                continue
+                    else:
+                        continue
+                    writer.writerow((examfull, matricule, basename, mark, ''.join(chr(ord('A') + i) for i in annotations), str(comments)))

@@ -16,11 +16,14 @@ from pprint import pprint # for debugging
 
 assert sys.version_info[0] >= 3, "Python 3 please"
 
-def warning(*args):
-    print('[Warning]', *args)
+def warning(*args): # orange
+    print('\033[33m' + 'Warning:', *args, '\033[0m')
     
-def info(*args):
-    print('[Info]', *args)
+def info(*args): # green
+    print('\033[32m' + 'Info:', *args, '\033[0m')
+
+def error(*args): # error
+    print('\033[31m' + 'Error:', *args, '\033[0m')
 
 p = argparse.ArgumentParser()
 
@@ -74,7 +77,7 @@ def parseQF(csvLine:dict, name:'QF1b', *, base=10, policies=POLICIES):
         assert part in ('digits', 'exp') and direction in ('plus', 'minus')
     
         field = 'TICKED:{}{}'.format(name, part)
-        Ticks = list(map(int, csvLine[field.format(name)].split(';')))
+        Ticks = list(map(int, csvLine[field].split(';')))
         
         # Example: Ticks = [0,1, 0,0,0,1,0,0,0,0,0,0, 0,1,0,0,0,0,0,0,0,0]
         

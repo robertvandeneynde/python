@@ -285,7 +285,8 @@ import functools
 def compose(*functions):
     """
     compose(hex, ord)(x) == hex(ord(x))
+    compose(hex, lambda x:1+x, ord)(x) = hex(1+ord(x))
     """
     return functools.reduce(lambda f, g: lambda *args, **kwargs: f(g(*args, **kwargs)), functions, lambda x: x)
 
-circle = infix(compose) # (hex |circle| ord)(x) == hex(ord(x))
+circle = compose # (hex |circle| ord)(x) == hex(ord(x))

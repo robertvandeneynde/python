@@ -17,18 +17,32 @@ import django
 from django.conf import settings
 from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
 import xml.etree.ElementTree as ET
+import smtplib
 
-HEADER        = 'PHYSS1001 Examen Physique Janvier 2017-2018'
-NUM_PAGES     = 5
-SEND_MAIL     = True # If False, no mail will be sent
+HEADER        = 'PHYSH101 Examen Physique Juin 2017-2018'
+
+NUM_PAGES     = 6 - 1 # Pages expected from the amc project
+NUM_PAGES_CONSECUTIVE = False # If True, page numbers must be from 1 to NUM_PAGES
+NUM_PAGES_INCLUDE_STATIC = [5] # Include the static pages called "subject-{serie}-page-{numpage}.jpg"
+
+SEND_MAIL     = False # If False, no mail will be sent
 PRINT_MAIL    = False # If True, mail will be printed, not sent.
 TEST_COMMENTS = False # if True, 1 mail will be sent will all the contents of comments.xml
-TO_ONE_PERSON = '' # 'rovdeynd@ulb.ac.be' # if present, all mails go to here
-ALSO_TO       = '' # 'Guillaume.Tillema@ulb.ac.be' # if present, send also to here
-SEND_FROM     = 'rovdeynd@ulb.ac.be'
+TO_ONE_PERSON = False # 'yuluuu@ulb.ac.be' # if present, all mails go to here
+ALSO_TO       = False # 'yolooo@ulb.ac.be' # if present, send also to here
+SEND_FROM     = 'yuluuu@ulb.ac.be' # must be a ulb address
 COMPUTE_MARK  = False
-MAKE_PDF      = True
-MAKE_STATS    = None # 'stats.csv' # if not empty, path of .csv (or .xlsx) to store stats for each <question> in xml with number of times sent
+MAKE_PDF      = True # if true, images are merged in one pdf, otherwise, each image is sent attached to the mail
+MAKE_STATS    = 'stats.csv' # if not empty, path of .csv (or .xlsx) to store stats for each <question> in xml with number of times sent
+STATS_INCLUDE_COMMENT = True # if True, include <comment> from xml and not just the <comment[name]>
+STATS_GENERATE_TXT = True # if True, include a txt version (stats.txt) (when MAKE_STATS = stats.csv)
+
+# WARNING: Tex support very basic (you'll probably have to edit generated file)
+STATS_GENERATE_TEX = False # if True, include a tex version (stats.tex) (when MAKE_STATS = stats.csv)
+STATS_TEX_TEMPLATE = 'faq-base.tex' # if not empty, template tex file, \content and \header will be replaced
+
+STATS_GENERATE_HTML = True # if True, include stats.csv (when MAKE_STATS = stats.csv)
+STATS_HTML_TEMPLATE = False # 'faq-base.html' # if not empty, template html file, {{ content }} and {{ header }} will be replaced
 
 # Flow control
 MAX_EMAIL        = None # None means no limit, 1 for example can be used for testing (send only 1 mail).
@@ -44,8 +58,8 @@ CONFIG_XML = 'comments.xml'
 # They must be English style "," separated, '"' if needed
 # If there are decimal points, English style too "1.5" not "1,5".
 # Ie. They can be read with python DictReader(file)
-STUDENT_FILE_CSV = '201718_PHYS-S-1001_SES1_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
-QUESTIONS_TICKED_FILE_CSV = 'ExamenJanvier2018Brut_numerical_values_refilled.csv' # Must have COPIE, A:MATRICULE, TICKED ";" amc option, "," separated. Pair QO1/QO1COMMENTS
+STUDENT_FILE_CSV = '../201718_PHYS-H-101_SES1_36418.csv' # '201718_PHYS-S-1001_SES1_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
+QUESTIONS_TICKED_FILE_CSV = '' # 'ExamenJanvier2018Brut_numerical_values_refilled.csv' # Must have COPIE, A:MATRICULE, TICKED ";" amc option, "," separated. Pair QO1/QO1COMMENTS
 
 # Directories OPTIONS
 SERIES = ('a', 'b') # if empty or None, implies only one project
@@ -55,7 +69,7 @@ ANNOTATE_CSV_PATH = "q{qid}-tags.csv"
 # TODO: decide if paths should go in XML
 
 if SERIES:
-    assert all(Re('^\w(.*\w)?$').match(serie) for serie in SERIES), "Series must begin and end with letters"
+    assert all(Re('^[^\W\d_](.*[^\W\d_])?$').match(serie) for serie in SERIES), "Series must begin and end with letters"
     assert len(set(SERIES)) == len(SERIES), "No duplicates allowed in series"
 
 settings.configure(
@@ -71,14 +85,16 @@ assert SEND_MAIL + PRINT_MAIL <= 1, "maximum one of SEND_MAIL, PRINT_MAIL"
 if MAKE_PDF:
     import img2pdf # https://gitlab.mister-muffin.de/josch/img2pdf
 
-def warning(*args):
-    print('[Warning]', *args)
+ZONE_BOX = 4
 
-def info(*args):
-    print('[Info]', *args)
+def warning(*args): # orange
+    print('\033[33m' + 'Warning:', *args, '\033[0m')
+    
+def info(*args): # green
+    print('\033[32m' + 'Info:', *args, '\033[0m')
 
-def error(*args):
-    print('[Error]', *args)
+def error(*args): # error
+    print('\033[31m' + 'Error:', *args, '\033[0m')
 
 def is_regex(obj):
     return isinstance(obj, re.compile('').__class__)
@@ -318,7 +334,7 @@ def make_faq_info_from_file(filename:str) -> FaqInfo:
 
 def make_faq_info_from_string(string:str) -> FaqInfo:
     import re
-    string = re.sub(r'<(\s|\d)', r'&lt;\1', string) # string.replace('< ', '&lt; ')
+    string = re.sub(r'<(\s|\d|=)', r'&lt;\1', string) # string.replace('< ', '&lt; ')
     string = re.sub(r'&(\s|\d)', r'&amp;\1', string) # string.replace('& ', '&amp; ')
     from xml.dom.minidom import parseString
     return make_faq_info_from_xml(parseString(string))
@@ -338,9 +354,9 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
     Examples:
     
     <questions>
-        <question id="1">
-            <!-- order of comments are important -->
-            <comment name="a"> <!-- markdown/latex/html convention: paragraph on blank line -->
+        <question id="1"> <!-- default matcher="simple" -->
+            <!-- order of <comment> are important -->
+            <comment name="a"> <!-- markdown/latex/html convention by default: paragraph on blank line. (syntax="rawmd") -->
                 La vitesse finale n'est pas de zéro.
                 En effet, on a de l'énergie.
                 
@@ -575,9 +591,11 @@ def throw(e):
     raise e
 
 class Mark:
-    class TooManyTicks(Exception):
+    class Error(Exception):
         pass
-    class NoTicks(Exception):
+    class TooManyTicks(Error):
+        pass
+    class NoTicks(Error):
         pass
     
     @staticmethod
@@ -592,7 +610,9 @@ class Mark:
         return ticked.pop()
 
 class Reader:
-    class EmptyValue(Exception):
+    class Error(Exception):
+        pass
+    class EmptyValue(Error):
         pass
     
     @staticmethod
@@ -927,6 +947,8 @@ class DbCopyInfo(CopyInfo):
                           for proj in self.projects_by_serie.values()
                           if proj.Matricule(matricule).exists('AmcStudentId'))
         
+        AmcQuestionId, LatexQuestionName, AmcStudentId = proj.Dict.keylist('AmcQuestionId', 'LatexQuestionName', 'AmcStudentId')
+        
         source = faq.tag_source_for_qid(qid)
         
         # TODO: tags = source.tags_for_matricule(matricule)
@@ -938,16 +960,17 @@ class DbCopyInfo(CopyInfo):
             QO_COMMENTS = re.compile('^QANN(\d+)$')
             QO_COMMENTS_FORMAT = 'QANN{}'.format
             
-            ZONE_BOX = 4
-            CaseToRatio = dict(proj.dbs['capture'].execute(f'''
-                select id_b, 1.0*black/total from capture_zone
-                where student=?
-                and type={ZONE_BOX}
-                and id_a=?
-                ''',
-                (proj.Matricule(matricule).to('AmcStudentId'),
-                proj.Dict('LatexQuestionName', QO_COMMENTS_FORMAT(qid)).to('AmcQuestionId'))
-            ))
+            CaseToRatio = {
+                digit: ratio if manual == -1 else manual
+                for digit, ratio, manual in proj.dbs['capture'].execute(f'''
+                    select id_b, 1.0*black/total, manual from capture_zone
+                    where student=?
+                    and type={ZONE_BOX}
+                    and id_a=?
+                    ''',
+                    (proj.Matricule(matricule).to(AmcStudentId),
+                     LatexQuestionName(QO_COMMENTS_FORMAT(qid)).to(AmcQuestionId)))
+            }
             # assert CaseToRatio.keys() == set(irange(1,11)) # here, corresponds to 7 (ABCDEFG) but we don't check that
             
             indices = [int(k)-1 for k,v in CaseToRatio.items() if v >= proj.seuil]
@@ -1022,7 +1045,7 @@ class CsvCopyInfo(CopyInfo):
                         mark = None if not COMPUTE_MARK else Mark.calculate_mark(Reader.read_ticked(student, column)),
                         ticked = {i for i,v in enumerate(Reader.read_ticked(student, column + 'COMMENTS'))
                                 if v})
-                except (Mark.TooManyTicks, Mark.NoTicks, Reader.EmptyValue) as e:
+                except (Mark.Error, Reader.Error) as e:
                     warning(e.__class__.__name__, f'Copy {copy}, matricule {matricule}, column {column}') # str(e))
                     # raise e
         
@@ -1098,10 +1121,13 @@ class QOInfo:
     QOANN = Re('^QANN(\d+)$')
     QOANN_FORMAT = 'QANN{}'.format
     
-    class CorrectorNoTick(Exception):
+    class Error(Exception):
         pass
     
-    class CorrectorMultiTick(Exception):
+    class CorrectorNoTick(Error):
+        pass
+    
+    class CorrectorMultiTick(Error):
         pass
 
     def __init__(self, project:AmcProject, exam:int, name:'QO1'):
@@ -1128,10 +1154,10 @@ class QOInfo:
         assert CaseToRatio.keys() == set(irange(1,11))
         points = [int(k)-1 for k,v in CaseToRatio.items() if v >= self.seuil]
         if len(points) == 0:
-            raise QOInfo.CorrectorNoTick("no points ticked")
+            raise self.CorrectorNoTick("no points ticked")
         
         if len(points) > 1:
-            raise QOInfo.CorrectorMultiTick("too much points ticked")
+            raise self.CorrectorMultiTick("too much points ticked")
         
         self._correctionValue = points[0]
         return self._correctionValue
@@ -1154,7 +1180,7 @@ class QOInfo:
         
         self._correctionCommentsList = annotations
         return self._correctionCommentsList
-
+    
 class StatsQuestionComments:
     def __init__(self, path, faq):
         assert path.endswith('.csv')
@@ -1174,13 +1200,90 @@ class StatsQuestionComments:
         
         assert self.N % len(self.faq.info) == 0
         total = self.N // len(self.faq.info)
+        
         print(total)
-        with open(self.path, 'w') as f:
+        
+        latexbits = []
+        htmlbits = []
+        
+        try:
+            f = open(self.path, 'w')
+            if STATS_GENERATE_TXT:
+                f2 = open(self.path[:-4] + '.txt', 'w')
+            
             W = csv.writer(f)
-            W.writerow(('QID', 'TAG', 'COUNT')) #, 'CONTENT'))
+            W.writerow(['QID', 'TAG', 'COUNT'] + ['CONTENT'] * bool(STATS_INCLUDE_COMMENT))
+            
             for qid in self.faq.info:
-                for tag in faq.info[qid]:
-                    W.writerow((qid, tag, self.D[qid][tag])) # convert_comment(self.faq.info[qid][tag])))
+                if STATS_GENERATE_TXT:
+                    title = f'Question {qid}'
+                    f2.write(title + '\n' + '=' * len(title) + '\n\n')
+                
+                if STATS_GENERATE_TEX:
+                    latexbits.append(r'\section*{Question %s}' % qid)
+                
+                if STATS_GENERATE_HTML:
+                    htmlbits.append(r'<h3>Question %s</h3>' % qid)
+                
+                bycount = lambda tag: self.D[qid][tag]
+                for tag in sorted(faq.info[qid], key=bycount, reverse=True):
+                    data = [qid, tag, self.D[qid][tag], convert_comment(self.faq.info[qid][tag])]
+                    
+                    W.writerow(data if STATS_INCLUDE_COMMENT else data[:3])
+                    
+                    if STATS_GENERATE_TXT:
+                        f2.write('[[ {2}: {1} ]]\n{3}\n\n'.format(*data))
+                    
+                    if STATS_GENERATE_TEX:
+                        latexbits.append('\\paragraph*{{ {1} ({2}) }}'.format(*data))
+                        latexbits.append(data[3].replace('\n', '\n\n') + '\n')
+                    
+                    if STATS_GENERATE_HTML:
+                        htmlbits.append('<h4>{1} ({2})</h4>'.format(*data))
+                        htmlbits.append('<p>{}</p>'.format(data[3].replace('\n', '\n\n')) + '\n')
+            
+            if STATS_GENERATE_TXT:
+                f2.close()
+            
+            if STATS_GENERATE_TEX:
+                if STATS_TEX_TEMPLATE:
+                    if not STATS_TEX_TEMPLATE.endswith('.tex'):
+                        warning(f'not a tex file: {STATS_TEX_TEMPLATE}')
+                    with open(STATS_TEX_TEMPLATE) as temp:
+                        template = temp.read()
+                else:
+                    template = '\\header\n\n\\content'
+                
+                with open(self.path[:-4] + '.tex', 'w') as file:
+                    file.write(template
+                        .replace(r'\header', HEADER)
+                        .replace(r'\content', '\n'.join(latexbits)))
+            
+            if STATS_GENERATE_HTML:
+                if STATS_HTML_TEMPLATE:
+                    if not STATS_HTML_TEMPLATE.endswith('.html'):
+                        warning(f'not a html file: {STATS_HTML_TEMPLATE}')
+                    with open(STATS_HTML_TEMPLATE) as temp:
+                        template = temp.read()
+                else:
+                    template = '<html><head><meta charset="utf-8"/></head><body><h2>{{ header }}</h2>\n\n{{ content }}</body></html>'
+                
+                with open(self.path[:-4] + '.html', 'w') as file:
+                    file.write(template
+                        .replace('{{ header }}', HEADER)
+                        .replace('{{ content }}', '\n'.join(htmlbits)))
+        finally:
+            f.close()
+            print('Written', self.path)
+            
+            if STATS_GENERATE_TXT:
+                print('Written', self.path[:-4] + '.txt')
+            
+            if STATS_GENERATE_TEX:
+                print('Written', self.path[:-4] + '.tex')
+                
+            if STATS_GENERATE_HTML:
+                print('Written', self.path[:-4] + '.html')
         
     def update(self, qid, tags):
         """
@@ -1202,10 +1305,26 @@ copy_info = DbCopyInfo()
 if MAKE_STATS:
     stats = StatsQuestionComments(MAKE_STATS, faq)
 
+
+def format_long_list(L, N=10):
+    return '({}): {}{}'.format(len(L), ' '.join(map(str, L[:N])), '...' * (len(L) > N))
+
 if any(not copy_info.Matricule(int(student['MATRICULE'])).exists('Feuille') for student in student_info.Students):
     L = [int(student['MATRICULE']) for student in student_info.Students if not copy_info.Matricule(int(student['MATRICULE'])).exists(copy_info.Feuille)]
-    warning('Matricule without copy ({}): {}{}'.format(len(L), ' '.join(map(str, L[:5])), '...' * (len(L) > 5)))
+    warning('Matricule without copy {}'.format(format_long_list(L)))
 
+NoEmailList = [
+    matricule
+    for matricule in copy_info.Dict[copy_info.Matricule, 'to', copy_info.Feuille].keys()
+    if str(matricule) not in student_info.Matricule_to_Netid
+]
+
+if NoEmailList:
+    warning('Copy without email in student list {}'.format(format_long_list(NoEmailList)))
+
+if SEND_MAIL:
+    django.core.mail.get_connection().open()
+    
 for feuille, matricule, netid, prenom, nom in (
     [[SERIES[0] + '0' if SERIES else '0', '123456', 'test', 'John', 'Doe']] if TEST_COMMENTS else (
         (copy_info.Matricule(int(student['MATRICULE'])).to('Feuille'),
@@ -1295,8 +1414,7 @@ for feuille, matricule, netid, prenom, nom in (
             if my_tags[qid]
         ) + '\n\n' + '\n'.join([
             "Plus d'infos sur la FAQ de l'examen sur l'UV.",
-            "Robert VANDEN EYNDE",
-            "Assistant",
+            "L'équipe des assistants",
         ]),
         SEND_FROM,
         (
@@ -1327,14 +1445,25 @@ for feuille, matricule, netid, prenom, nom in (
             filenames = {i:'test.jpg' for i in irange(1, NUM_PAGES)}
         else:
             num_filename = copy_info.img_filenames(matricule)
-            assert len(num_filename) == NUM_PAGES
-                            
+            assert len(num_filename) == NUM_PAGES, num_filename
+            
+            if NUM_PAGES_INCLUDE_STATIC:
+                assert set(NUM_PAGES_INCLUDE_STATIC) & set(num for num, filename in num_filename) == set()
+                
+                for numpage in NUM_PAGES_INCLUDE_STATIC:
+                    filename = (f"subject-{serie}-page-{numpage}.jpg" if SERIES else 
+                                f"subject-page-{numpage}.jpg")
+                    
+                    num_filename.append( (numpage, filename) ) # will be sorted after anyway
+            
             filenames = OrderedDict(
                 (f'page-{num}.jpg', filename)
-                for num, filename in sorted(num_filename)
-            )
-    
-            assert set(num for num, filename in num_filename) == set(irange(1, NUM_PAGES))
+                for num, filename in sorted(num_filename))
+            
+            if NUM_PAGES_CONSECUTIVE:
+                assert set(num for num, filename in num_filename) == set(irange(1, NUM_PAGES))
+            if NUM_PAGES_INCLUDE_STATIC:
+                assert set(num for num, filename in num_filename) == set(irange(1, NUM_PAGES + len(NUM_PAGES_INCLUDE_STATIC)))
             assert set(filename.lower().endswith('.jpg') for num, filename in num_filename)
     
     if isinstance(filenames, dict):
@@ -1356,7 +1485,7 @@ for feuille, matricule, netid, prenom, nom in (
             
     else:
         if MAKE_PDF:
-            if not all(map(os.path.exists, filenames())):
+            if not all(map(os.path.exists, filenames)):
                 raise FileNotFoundError(next(f for f in filenames if not os.path.exists(f)))
             mail.attach(pdf_filename_from_infos, img2pdf.convert(filenames))
         else:
@@ -1369,7 +1498,13 @@ for feuille, matricule, netid, prenom, nom in (
         print('-- MAIL --\n', mail.message().as_string())
         n_send = 1
     elif SEND_MAIL:
-        n_send = mail.send()
+        try:
+            n_send = mail.send()
+        except smtplib.SMTPServerDisconnected:
+            print('Retrying')
+            django.core.mail.get_connection().close()
+            django.core.mail.get_connection().open()
+            n_send = mail.send()
     else:
         raise AssertionError
     

@@ -2,28 +2,64 @@ from __future__ import print_function
 import sys
 import os
 
+import math
 from math import *
 if sys.version_info < (3,6):
     tau = 2 * pi
+
+# degrees cos, sin, tan
+cosd = lambda x: cos(radians(x)) if not(x % 90 == 0) else [1, 0, -1, 0][(x // 90) % 4]
+sind = lambda x: sin(radians(x)) if not(x % 90 == 0) else [0, 1, 0, -1][(x // 90) % 4]
+tand = lambda x: sind(x)/cosd(x)
+atand = lambda x: degrees(atan(x))
+atan2d = lambda y, x: degrees(atan(y, x))
+acosd = lambda x: degrees(acos(x)) if not(x in (-1,0,1)) else [180, 90, 0][int(x)+1]
+asind = lambda x: degrees(asin(x)) if not(x in (-1,0,1)) else [-90, 0, 90][int(x)+1]
+
+# french
+racine = sqrt
+
+# log, ln, log10
+ln = math.log
+
+def log(x, base=None):
+    if base is None:
+        raise ValueError('Log without a base is ambiguous, use log10 or ln')
+    return math.log(x, base)
+
 import itertools
 from itertools import *
+
 import functools
 from functools import *
+
 from operator import *
 from collections import *
+
 from fractions import Fraction
-from fractions import Fraction as F
+F = Fraction # from fractions import Fraction as F
+
 from datetime import date, time, datetime, timedelta
+combine = datetime.combine
+
+def french_date(date):
+    return x.strftime("%d/%m/%Y %Hh%M")
+
+datefrench = datefr = date_french = french_date
+
 if sys.version_info[0] >= 3:
     import html
+
 import random
 from random import randint, randrange, shuffle, choice
+
 import argparse
 import unicodedata
 import re
 import json
 import csv
 import sqlite3
+
 from pprint import pprint
 
 import operator
@@ -65,8 +101,7 @@ try:
     from numpy import array, matrix
     from numpy import cross, dot
     from numpy.linalg import norm
-    def c(*args, **kwargs):
-        return numpy.array(args, **kwargs)
+    c = vec = lambda *args, **kwargs: numpy.array(args, **kwargs)
 except:
     pass
 
@@ -79,7 +114,7 @@ try:
 except:
     pass
 
-# new functions
+# map filter
 def lmap(*a, **b):
     """ return list(map(*a, **b)) """
     return list(map(*a, **b))
@@ -94,12 +129,13 @@ if sys.version_info[0] < 3:
 
 # unicode stuff
 try:
+    import uniutils
     from uniutils import uniname, hexord, uord, uordname, uniline, unicontext
 except:
     pass
 
 # 3D, gl shaders like
-def vec3(x,y,z):
+def vec3(x=None,y=None,z=None):
     '''
     vec3(1) == array((1,1,1))
     vec3((1,2,3)) == 
@@ -107,7 +143,8 @@ def vec3(x,y,z):
     vec3(1,(2, 3)) == 
     vec3(1,2,3) == array((1,2,3))
     '''
-    return (array(x)               if y is None and z is None and hasattr(x, '__len__') and len(x) == 3 else
+    return (array((0,0,0))         if x is None else
+            array(x)               if y is None and z is None and hasattr(x, '__len__') and len(x) == 3 else
             array((x,x,x))         if y is None and z is None else
             array((x[0], x[1], y)) if z is None and hasattr(x, '__len__') and len(x) >= 2 else
             array((x, y[0], y[1])) if z is None and hasattr(y, '__len__') and len(y) >= 2 else
@@ -127,7 +164,7 @@ try:
     normalized = fo.unary(normalized)
     f = F = div = frac = fo.infix(Fraction)
     del fo
-except:
+except ImportError:
     pass
 
 # Statistical stuffs
@@ -185,7 +222,9 @@ def print_matrix(M):
         for i in range(len(row)):
             row[i] += ' ' * (widths[i] - len(row[i]))
     print('\n'.join(' '.join(row) for row in M))
-    
+
+# functional tools
+# TODO: elipartial(print, ..., '+', ...)(1,2) should print('1 + 2')
 def elipartial(func, *args, **keywords):
     """ elipartial(pow, ..., 2) == lambda x: x**2 """
     import itertools
@@ -201,6 +240,10 @@ def elipartial(func, *args, **keywords):
     return newfunc
 
 try:
-    from funcoperators import circle # (hex |circle| ord)(x) == hex(ord(x))
+    from funcoperators import compose, circle # (hex |circle| ord)(x) == hex(ord(x))
+    rond = circle
 except:
     pass
+
+def desc(x):
+    return {n:getattr(x, n) for n in dir(x) if not hasattr(getattr(x,n), '__call__')}

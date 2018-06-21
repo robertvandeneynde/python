@@ -1,8 +1,15 @@
+#!/usr/bin/env python3
 import csv, re
 from pprint import pprint
 
-def warning(*args):
-    print('[Warning]', *args)
+def warning(*args): # orange
+    print('\033[33m' + 'Warning:', *args, '\033[0m')
+    
+def info(*args): # green
+    print('\033[32m' + 'Info:', *args, '\033[0m')
+
+def error(*args): # error
+    print('\033[31m' + 'Error:', *args, '\033[0m')
 
 SERIES = ('A', 'B')
 

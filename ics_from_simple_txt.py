@@ -74,7 +74,7 @@ is_not_none = lambda x: x is not None
 def naive_to_utc(naive):
     return pytz.timezone('Europe/Brussels').localize(naive, is_dst=None).astimezone(pytz.utc)
 
-def printret(x): print(x): return x
+def printret(x): print(x); return x
 
 def convert(bit):
     M = [(r, r.fullmatch(bit)) for r in RE_LIST]

@@ -5,9 +5,11 @@ from math import sin, cos, degrees, radians, tan
 import numpy
 import numpy as np
 from numpy import array, matrix, linalg
+from numpy import float32
+farray = float32
 
-def farray(*args):
-    return numpy.array(*args, dtype=numpy.float32)
+def fvec(*args):
+    return farray(args)
 
 def sind(x):
     return sin(radians(x))
@@ -104,7 +106,7 @@ def vec_from_args(size, *args):
 def vec2(*args, **kwargs):
     """
     vec2(1,2) -> farray((1.0, 2.0))
-    vec2(5) -> farray((5.0vec_from_kwargs, 5.0))
+    vec2(5) -> farray((5.0, 5.0))
     vec2(y=6, x=1) -> farray((1.0, 6.0))
     """
     if args and kwargs:
