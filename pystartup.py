@@ -165,7 +165,7 @@ try:
     f = F = div = frac = fo.infix(Fraction)
     del fo
 except ImportError:
-    pass
+    ...
 
 # Statistical stuffs
 def mean(it):
@@ -247,3 +247,28 @@ except:
 
 def desc(x):
     return {n:getattr(x, n) for n in dir(x) if not hasattr(getattr(x,n), '__call__')}
+
+def irange(*args) -> range:
+    """
+    list(irange(5)) == [1,2,3,4,5]
+    list(irange(1,5)) == [1,2,3,4,5]
+    list(irange(2,5)) == [2,3,4,5]
+    list(irange(2,10,2)) == [2,4,6,8,10]
+    list(irange(5,2,-1)) == [5,4,3,2]
+    """
+    if len(args) == 1:
+        return range(1, 1+args[0])
+    r = range(*args)
+    if r.step < 0:
+        return range(r.start, r.stop-1, r.step)
+    return range(r.start, 1+r.stop, r.step)
+
+try:
+    import funcoperators as fo 
+    irange = fo.infix(irange)
+    exclusive = fo.infix(range)
+    del fo
+except ImportError:
+    exclusive = range
+
+inclusive = irange

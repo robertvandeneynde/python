@@ -1,3 +1,53 @@
+"""
+Always wanted to add custom binary operators ?
+a = (1,2,3) /dot/ (4,5,6) # a = 32
+
+## dot and cross product
+dot = infix(numpy.dot)
+a = (1,2,3) /dot/ (4,5,6) # use as an infix
+r = 2 + (1,2,3) /dot/ (4,5,6)
+r = 2 + (1,2,3) *dot* (4,5,6) # can use any binary operator like /, |, *, %... Beware, ** is RightToLeft
+r = 2 + dot((1,2,3), (4,5,6)) # still works as a function
+
+## fractions
+frac = infix(Fraction)
+a = 1 + 1 /frac/ 2
+b = 2 * (a + 3) /frac/ (a + 1)
+
+## ranges
+@infix # as decorator
+def inclusive(a,b):
+    return range(a, b+1)
+
+for i in 2 /inclusive/ 5: # could also write |inclusive| or +inclusive+ or %inclusive% or 
+    print(i) # 2 3 4 5
+
+for i in inclusive(2, 5): # can still be used as function
+    print(i) # 2 3 4 5
+
+## pipes : postfix
+@postfix
+def no_zero(L):
+return [x for x in L if x != 0]
+
+@postfix
+def plus_one(L):
+return [x+1 for x in L]
+
+Y = [1,2,7,0,2,0] |no_zero |plus_one
+# Y == [2,3,8,3]
+Y = plus_one(no_zero([1,2,7,0,2,0]))
+# Y == [2,3,8,3]
+
+## pipe factory
+def filter_out(x):
+    @postfix
+    def f(L):
+        return [y for y in L if y != x]
+    return f
+L = [1,2,7,0,2,0] | FilterOut(0) 
+"""
+
 '''
 TODO : add wraps component to those concepts 
 '''
@@ -100,18 +150,13 @@ class infix(base):
         return sum(x*y for x,y in zip(X,Y))
     
     r = f((1,2,3), (4,5,6)) # simple call
-    r = (1,2,3) |f| (4,5,6) # infix call
+    r = (1,2,3) /f/ (4,5,6) # infix call, can use any binary operator, like /, |, *, <<, ^, ...
+    # if used with **, beware, it's RightToLeft (RTL): a ** b ** c == a ** (b ** c)
 
-    r = 2 + (1,2,3) *f* (4,5,6)   # use * for precedence
+    r = 2 + (1,2,3) *f* (4,5,6) # "*" has higher precedence than "+"
     
-    dot = infix(np.dot) # from existing function
-    r = 2 + (1,2,3) *dot* (4,5,6) # clear syntax
-
-    r = (1,2,3) |infix(np.dot)| (4,5,6) # one liner
-    I = infix
-    r = (1,2,3) |I(np.dot)| (4,5,6) # other style
-    
-    beware, ** is RTL
+    dot = infix(np.dot) # from existing function (recommended)
+    r = 2 + (1,2,3) *dot* (4,5,6) # clear syntax, for dot product, "*" makes sense
     '''
     
     def __ror__(self, other):

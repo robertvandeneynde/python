@@ -4,6 +4,8 @@ import csv
 import re
 from re import compile as Re
 import xml.etree.ElementTree as XmlElement
+import os
+from os.path import splitext
 
 ZONE_BOX = 4
 
@@ -160,8 +162,12 @@ class DictCollection:
         for n in args:
             D[n] = self(n)
 
+def set_testsubset(A,B):
+    assert A <= B
+    return A
+
 class QFInfo:
-    POLICIES = {'EmptyColumnMeansFirstTicked'} & {'EmptyColumnMeansFirstTicked', 'NoSignMeansPlus', 'MultipleTickMeansNoTick'} # set(args.policies)
+    POLICIES = set_testsubset({'EmptyColumnMeansFirstTicked', 'NoMantissaMeansError'}, {'NoMantissaMeansError', 'EmptyColumnMeansFirstTicked', 'NoSignMeansPlus', 'MultipleTickMeansNoTick'}) # set(args.policies)
     
     class Error(Exception):
         pass
@@ -172,8 +178,11 @@ class QFInfo:
     class MultipleTicksInColumn(Error):
         pass
     
+    class NoMantissa(Error):
+        pass
+    
     def __init__(self, Dict:DictCollection, dbs:{'name':sqlite3}, seuil:float, exam:int, name:'QO1'):
-        assert StandardNames.QFSerie.fullmatch(name)
+        assert StandardNames.QF_SERIE.fullmatch(name)
         self.Dict = Dict
         self.dbs = dbs
         self.seuil = seuil
@@ -214,10 +223,18 @@ class QFInfo:
             if hasSign:
                 Sign = Ticks[0:2]
                 Digits = [Ticks[2+n : 2+n+base] for n in range(0, base * expectedNumbers, base)]
+                # Example: Sign = [0,1]
+                # Example: Digits = [[0,0,0,1,0,0,0,0,0,0], [0,1,0,0,0,0,0,0,0,0]]
             else:
                 Sign = [1,0] # Positive
                 Digits = [Ticks[n : n+base] for n in range(0, base * expectedNumbers, base)]
+                # Example: Digits = [[0,0,0,1,0,0,0,0,0,0], [0,1,0,0,0,0,0,0,0,0]]
             
+            if 'NoMantissaMeansError' in policies:
+                if part == 'digits':
+                    if all(sum(col) == 0 for col in Digits):
+                        raise self.NoMantissa("User ticked no mantissa")
+                
             if Sign == [0,0] and 'NoSignMeansPlus' in policies:
                 Sign = [1,0]
             
@@ -234,9 +251,9 @@ class QFInfo:
                     if 'EmptyColumnMeansFirstTicked' in policies:
                         col[0] = 1
                     else:
-                        raise QFInfo.EmptyColumn("User ticked zero columns in a column (for {})".format(part))
+                        raise self.EmptyColumn("User ticked zero columns in a column (for {})".format(part))
                 if sum(col) > 1:
-                    raise QFInfo.MultipleTicksInColumn("User ticked two columns in a column (for {})".format(part))
+                    raise self.MultipleTicksInColumn("User ticked two columns in a column (for {})".format(part))
             
             sign = +1 if Sign[0] else -1
             digits = [D.index(1) for D in Digits]
@@ -274,7 +291,7 @@ class QOInfo:
         self.seuil = seuil
         self.exam = exam
         self.name = name
-        self.qnum = int(self.QO.fullmatch(name).group(1))
+        self.qnum = int(StandardNames.QO.fullmatch(name).group(1))
     
     def correctionValue(self) -> 4:
         if hasattr(self, '_correctionValue'):
@@ -404,7 +421,7 @@ class ReadFromMatriculeMarkCsv:
             self.Dict['Matricule', 'to', 'Mark'] = {int(s['MATRICULE']): int(s[column_name]) for s in csv.DictReader(f)}
 
 class XLWriter:
-    def __init__(self, filename):
+    def __init__(self, filename, *, print_created=False):
         import os
         if os.path.splitext(filename)[1] == '':
             filename += '.xlsx'
@@ -412,12 +429,15 @@ class XLWriter:
         import openpyxl
         self.filename = filename
         self.wb = openpyxl.Workbook()
+        self.print_created = print_created
         
     def writerow(self, row):
         self.wb.active.append(row)
     
     def close(self):
         self.wb.save(self.filename)
+        if self.print_created:
+            info('Created', self.filename)
     
     def __enter__(self):
         return self
@@ -426,20 +446,23 @@ class XLWriter:
         self.close()
 
 class CSVWriter:
-    def __init__(self, filename):
+    def __init__(self, filename, *, print_created=False):
         import os
         if os.path.splitext(filename)[1] == '':
             filename += '.csv'
         assert filename.endswith('.csv')
         self.filename = filename
-        self.f = open(filename, 'w', endline='')
+        self.f = open(filename, 'w', newline='')
         self.writer = csv.writer(self.f)
+        self.print_created = print_created
         
     def writerow(self, row):
         self.writer.writerow(row)
     
     def close(self):
         self.f.close()
+        if self.print_created:
+            info('Created', self.filename)
     
     def __enter__(self):
         self.f.__enter__()
@@ -447,12 +470,17 @@ class CSVWriter:
     
     def __exit__(self, type, value, traceback):
         self.f.__exit__(type, value, traceback)
+        if self.print_created:
+            info('Created', self.filename)
 
 class CSVAndXLWriter:
-    def __init__(self, filename):
+    def __init__(self, filename, *, print_created=False):
+        import os
+        if os.path.splitext(filename)[1] == '':
+            filename += '.csv'
         assert filename.endswith('.csv')
-        self.csv = CSVWriter(filename)
-        self.xl = XLWriter(filename[:-4] + '.xlsx')
+        self.csv = CSVWriter(filename, print_created=print_created)
+        self.xl = XLWriter(filename[:-4] + '.xlsx', print_created=print_created)
         
     def writerow(self, row):
         self.csv.writerow(row)
@@ -491,10 +519,10 @@ class StandardNames:
     QO = Re('^QO(\d+)$')
     QO_FORMAT = 'QO{}'.format
     
-    QFSerie = Re('^QF(?P<num>\d+)(?P<serie>\w)$')
-    QFSerieFormat = 'QF{num}{serie}'.format
-    QFDigits = Re('^QF(?P<num>\d+)(?P<serie>\w)(?P<part>digits|exp)$')
-    QFDigitsFormat = 'QF{num}{serie}{part}'.format
+    QF_SERIE = Re('^QF(?P<num>\d+)(?P<serie>\w)$')
+    QF_SERIE_FORMAT = 'QF{num}{serie}'.format
+    QF_DIGITS = Re('^QF(?P<num>\d+)(?P<serie>\w)(?P<part>digits|exp)$')
+    QF_DIGITS_FORMAT = 'QF{num}{serie}{part}'.format
     
     QOANN = Re('^QANN(\d+)$')
     QOANN_FORMAT = 'QANN{}'.format
@@ -502,12 +530,12 @@ class StandardNames:
     QMAT = Re('^zmatr[\d+]$')
     QMAT_FORMAT = 'zmatr[{}]'.format
 
-def DoAssociationAuto(SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+def DoAssociationAuto(SERIES=('A', 'B'), PROJECT_NAME:'string that may contain {serie} tag'='generateurAMC_{serie}'):
     assert len(set(map(str.lower, SERIES))) == len(SERIES), "no duplicates in series !"
 
     to_commit = []
     for serie in SERIES:
-        proj = PROJ_NAME_WITH_SERIE_FORMAT.format(serie=serie)
+        proj = PROJECT_NAME.format(serie=serie)
         dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
         
         xmldoc = XmlElement.parse(f'{proj}/options.xml')
@@ -547,7 +575,9 @@ def DoAssociationAuto(SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string tha
     for db in to_commit:
         db.commit()
 
-def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+def GenerateAnswers(*, SERIES=('A', 'B'), PROJECT_NAME:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+    assert len(set(map(str.lower, SERIES))) == len(SERIES), f"no duplicates in series, got {SERIES}"
+    
     try:
         import openpyxl
         Writer = XLWriter
@@ -555,9 +585,9 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
         warning('openpyxl not installed, no xlsx generated.')
         Writer = CSVWriter
         
-    with Writer('all_answers') as writer, Writer('frequencies') as other_writer:
+    with Writer('all_closed_answers') as writer, Writer('frequencies') as other_writer:
       for serie in SERIES:
-        proj = PROJ_NAME_WITH_SERIE_FORMAT.format(serie=serie)
+        proj = PROJECT_NAME.format(serie=serie)
         dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
         
         xmldoc = XmlElement.parse(f'{proj}/options.xml')
@@ -575,7 +605,7 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
         Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
             dbs['layout'].execute('''select question, name from layout_question'''))
         
-        Dict[AmcStudentId, 'to', Matricule] = {
+        A = Dict[AmcStudentId, 'to', Matricule] = {
             int(student): int(auto or manual)
             for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association')
         }
@@ -584,10 +614,10 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
         
         qf_names = []
         for latexname in Dict[AmcQuestionId, 'to', LatexQuestionName].values():
-            qf_match = StandardNames.QFDigits.fullmatch(latexname)
+            qf_match = StandardNames.QF_DIGITS.fullmatch(latexname)
             if qf_match and qf_match.group('part') == 'digits':
                 m = qf_match.groupdict()
-                basename = StandardNames.QFDigitsFormat(part='', num=m['num'], serie=m['serie'])
+                basename = StandardNames.QF_DIGITS_FORMAT(part='', num=m['num'], serie=m['serie'])
                 qf_names.append(basename)
         qf_names.sort()
         
@@ -611,7 +641,11 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
                     row.extend((values['value'], values['mantissa'], values['exp'], values['sign']))
                     
                     aggreg[basename][value] += 1
-                    
+                
+                except QFInfo.NoMantissa:
+                    aggreg[basename][''] += 1
+                    row.extend(('', ) * 4)
+                
                 except QFInfo.MultipleTicksInColumn:
                     warning(examfull, matricule, basename, 'MultipleTicksInColumn')
                     row.extend(('MultipleTicksInColumn', ) * 4)
@@ -619,7 +653,7 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
             writer.writerow(row)
         
         # other_writer
-        from pprint import pprint
+        # from pprint import pprint
         from functools import partial
         for key, agg in aggreg.items():
             other_writer.writerow([key])
@@ -629,58 +663,78 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJ_NAME_WITH_SERIE_FORMAT:'string th
     
     globals()['info']('Created', other_writer.filename)
     globals()['info']('Created', writer.filename)
+
+ANSWERS_PHYSS1001_JANVIER_2017_2018 = { # list of [value, min, max, -points minus]
+    'QF5a': [
+        [7.81e-1, 7.71e-1, 7.81e-1, 0],
+        [1.56, 1.54, 1.58, -1]
+    ],
+    'QF6a': [
+        [-3.32e-9, 3.22e-9, 3.42e-9, 0],
+        [-375, 371, 379, -1],
+    ],
+    'QF7a': [
+        [1.33e-8, 1.23e-8, 1.43e-8, 0],
+        [5.32e-8, 5.3e-8, 5.34e-8, -3],
+        [2.66e-8, 2.64e-8, 2.68e-8, -3]
+    ],
+    'QF8a': [
+        [2.5, 2.4, 2.6, 0],
+    ],
+    'QF5b': [
+        [1.53, 1.43, 1.63, 0],
+        [3.06, 3.04, 3.08, -1]
+    ],
+    'QF6b': [
+        [-5.53e-9, 5.43e-9, 5.63e-9, 0],
+        [625, 621, 629, -1]
+    ],
+    'QF7b': [
+        [1.18e-8, 1.08e-8, 1.28e-8, 0],
+        [2.36e-8, 2.34e-8, 2.38e-8, -3],
+        [3.54e-8, 3.52e-8, 3.56e-8, -3],
+        [1.77e-8, 1.75e-8, 1.79e-8, -3],
+    ],
+    'QF8b': [
+        [1.41, 1.31, 1.51, 0],
+    ],
+}
     
+ANSWERS_PHYSS1001_JUIN_2017_2018 = { 
+    'QF7a': [
+        [0, 0, 0, 0],
+    ],
+    'QF8a': [
+        [6.53e6, 6.43e6, 6.63e6, 0],
+    ],
+    'QF9a': [
+        [2.72e7, 2.62e7, 2.72e7, 0],
+    ],
+    'QF10a': [
+        [2.83e-7, 2.73e-7, 2.93e-7, 0],
+    ],
+}
 
-if __name__ == '__main__':
-
-    OUT_FILE = 'lolilol.csv'
-    assert OUT_FILE.endswith('.csv')
-
-    SERIES = ('A', 'B')
-    PROJ_NAME_FROM_SERIE = lambda x: 'generateurAMC_{}'.format(x.upper())
+# from list to dict with optional keys
+ANSWERS_PHYSS1001_JUINRATTR_2017_2018 = { # list of [value, min, max, -points minus]
+    'QF7a': [
+        [0, 0, 0, 0],
+    ],
+    'QF8a': [
+        [6.53e6, 6.43e6, 6.63e6, 0],
+    ],
+    'QF9a': [
+        [2.72e7, 2.62e7, 2.72e7, 0],
+    ],
+    'QF10a': [
+        [2.83e-7, 2.73e-7, 2.93e-7, 0],
+    ],
+}
     
+def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT_NAME:'path to project, may contain {serie}'='generateurAMC_{serie}'):
+    assert splitext(OUT_FILE)[1] == '', "please do not provide any extension"
     assert len(set(map(str.lower, SERIES))) == len(SERIES), f"no duplicates in series, got {SERIES}"
     
-    question_formats = {
-        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
-    }
-
-    qf_answers = { # list of [value, min, max, -points minus]
-        'QF5a': [
-            [7.81e-1, 7.71e-1, 7.81e-1, 0],
-            [1.56, 1.54, 1.58, -1]
-        ],
-        'QF6a': [
-            [-3.32e-9, 3.22e-9, 3.42e-9, 0],
-            [-375, 371, 379, -1],
-        ],
-        'QF7a': [
-            [1.33e-8, 1.23e-8, 1.43e-8, 0],
-            [5.32e-8, 5.3e-8, 5.34e-8, -3],
-            [2.66e-8, 2.64e-8, 2.68e-8, -3]
-        ],
-        'QF8a': [
-            [2.5, 2.4, 2.6, 0],
-        ],
-        'QF5b': [
-            [1.53, 1.43, 1.63, 0],
-            [3.06, 3.04, 3.08, -1]
-        ],
-        'QF6b': [
-            [-5.53e-9, 5.43e-9, 5.63e-9, 0],
-            [625, 621, 629, -1]
-        ],
-        'QF7b': [
-            [1.18e-8, 1.08e-8, 1.28e-8, 0],
-            [2.36e-8, 2.34e-8, 2.38e-8, -3],
-            [3.54e-8, 3.52e-8, 3.56e-8, -3],
-            [1.77e-8, 1.75e-8, 1.79e-8, -3],
-        ],
-        'QF8b': [
-            [1.41, 1.31, 1.51, 0],
-        ],
-    }
-
     assert all(len(L) > 0 for L in qf_answers.values())
     assert all(len(X) == 4 for L in qf_answers.values() for X in L)
     assert all(minus == 0 for L in qf_answers.values() for i,(value, m, M, minus) in enumerate(L) if i == 0)
@@ -688,24 +742,37 @@ if __name__ == '__main__':
 
     # TODO: assert no overlap : assert all(map(no_overlap, qf_answers.values()))
 
-    qf_policies = {
-        'QF5a': set(),
-        'QF6a': set(), # {'SignMinus1'},
-        'QF7a': set(),
-        'QF8a': set(),
-        'QF5b': set(),
-        'QF6b': set(), # {'SignMinus1'},
-        'QF7b': set(),
-        'QF8b': set(),
+    question_formats = {
+        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
     }
 
-    assert all(X <= {'SignMinus1'} for X in qf_policies.values())
+    # should move in qf_answers
+    qf_special_treatment = {
+        'QF5a': {},
+        'QF6a': {}, # {'SignMinus1'},
+        'QF7a': {},
+        'QF8a': {},
+        'QF9a': {},
+        'QF9a': {},
+        'QF10a': {},
+        'QF5b': {},
+        'QF6b': {}, # {'SignMinus1'},
+        'QF7b': {},
+        'QF8b': {},
+    }
+    
+    for k in qf_special_treatment:
+        if not isinstance(qf_special_treatment[k], set):
+            qf_special_treatment[k] = set(qf_special_treatment[k])
 
-    with CSVAndXLWriter(OUT_FILE) as writer:
+    assert all(X <= {'SignMinus1'} for X in qf_special_treatment.values())
+    
+    data_marks = []
+    
+    with CSVAndXLWriter(OUT_FILE, print_created=True) as writer:
         writer.writerow(('COPIE','MATRICULE','QUESTION','MARK','ANNOTATION','COMMENTS'))
         for serie in SERIES:
-            proj = PROJ_NAME_FROM_SERIE(serie)
-            # student_csv = f'.csv'
+            proj = PROJECT_NAME.format(serie=serie)
 
             dbs = {name:sqlite3.connect(f'{proj}/data/{name}.sqlite') for name in ('layout', 'association', 'capture')}
             
@@ -734,10 +801,10 @@ if __name__ == '__main__':
                 for exam, matricule in Dict[AmcStudentId, 'to', Matricule].items():
                     examfull = "{}{}".format(serie, exam)
                     comments = ''
-                    qf_match = StandardNames.QFDigits.fullmatch(latexname) 
+                    qf_match = StandardNames.QF_DIGITS.fullmatch(latexname) 
                     if qf_match and qf_match.group('part') == 'digits': # latexname = QF5digits
                         m = qf_match.groupdict()
-                        basename = StandardNames.QFDigitsFormat(part='', num=m['num'], serie=m['serie']) # basename = QF5a
+                        basename = StandardNames.QF_DIGITS_FORMAT(part='', num=m['num'], serie=m['serie']) # basename = QF5a
                         info = QFInfo(Dict, dbs, seuil, exam, basename)
                         
                         try:
@@ -754,7 +821,7 @@ if __name__ == '__main__':
                                     m = 3
                                 else:
                                     m = 0
-                                if 'SignMinus1' in qf_policies[basename] and values['sign'] != answer_sign:
+                                if 'SignMinus1' in qf_special_treatment[basename] and values['sign'] != answer_sign:
                                     m -= 1
                                 if minus:
                                     assert minus < 0
@@ -767,6 +834,10 @@ if __name__ == '__main__':
                                 
                             comments = (values, qf_answers[basename])
                             annotations = [] # TODO ?
+                        
+                        except QFInfo.NoMantissa:
+                            mark = 0
+                        
                         except QFInfo.MultipleTicksInColumn:
                             warning(examfull, matricule, basename, 'MultipleTicksInColumn')
                             mark = 0
@@ -792,3 +863,42 @@ if __name__ == '__main__':
                     else:
                         continue
                     writer.writerow((examfull, matricule, basename, mark, ''.join(chr(ord('A') + i) for i in annotations), str(comments)))
+                    data_marks.append((examfull, matricule, basename, mark))
+    
+    # generate pretty xl
+    # TODO: make it work for series
+    
+    all_questions = set() # not mandatory
+    student_info = {}
+    for examfull, matricule, basename, mark in data_marks:
+        if matricule not in student_info:
+            student_info[matricule] = {
+                'exam': examfull,
+                'questions': {},
+            }
+        else:
+            assert student_info[matricule]['exam'] == examfull, f"Student {matricule} has mutiple exams {student_info[matricule]['exam']}, {examfull}!"
+            
+        student_info[matricule]['questions'][basename] = mark
+        all_questions.add(basename) # not mandatory
+    
+    assert all(student_info[matricule]['questions'].keys() == all_questions for matricule in student_info) # not mandatory
+    
+    def sort_key(basename):
+        first = (2 if basename.startswith('QF') else 
+                 1 if basename.startswith('QO') else
+                 3)
+        digits = Re('\d+').findall(basename)
+        second = int(digits[0]) if digits else 1000
+        return first, second
+    
+    all_questions = sorted(all_questions, key=sort_key)
+    
+    with CSVAndXLWriter(OUT_FILE + '_pretty', print_created=True) as writer:
+        firstrow = ['MATRICULE', 'EXAM'] + list(all_questions)
+        writer.writerow(firstrow)
+        for matricule in sorted(map(int, student_info)):
+            row = [matricule, student_info[matricule]['exam']]
+            for question in all_questions:
+                row.append( student_info[matricule]['questions'][question] )
+            writer.writerow(row)
