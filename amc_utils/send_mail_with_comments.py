@@ -1408,6 +1408,7 @@ for feuille, matricule, netid, prenom, nom in (
                 coms = '\n'.join(
                     "- {}".format(convert_comment(faq.info[qid][tag]).replace('\n', '\n  '))
                     for tag in my_tags[qid]
+                    if convert_comment(faq.info[qid][tag])
                 )
             )
             for qid in faq.info

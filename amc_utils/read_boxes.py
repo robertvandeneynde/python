@@ -6,6 +6,9 @@ from re import compile as Re
 import xml.etree.ElementTree as XmlElement
 import os
 from os.path import splitext
+from decimal import Decimal
+
+from pprint import pprint
 
 ZONE_BOX = 4
 
@@ -13,6 +16,9 @@ def irange(*args):
     """ inclusive_range: irange(1,5) == range(1,6) """
     r = range(*args)
     return range(r.start, r.stop + 1, r.step)
+
+def lmap(*args, **kwargs):
+    return list(map(*args, **kwargs))
 
 def dict_int_key(it):
     return {int(a):b for a,b in it}
@@ -189,7 +195,7 @@ class QFInfo:
         self.exam = exam
         self.name = name
 
-    def parseQF(self, *, base=10, policies=POLICIES) -> {'value':float, 'mantissa':float, 'exp':float, 'sign':int}:
+    def parseQF(self, *, base=10, policies=POLICIES) -> {'value':Decimal, 'mantissa':Decimal, 'exp':Decimal, 'sign':int}:
         
         AmcQuestionId, LatexQuestionName = self.Dict.keylist('AmcQuestionId', 'LatexQuestionName')
         
@@ -260,8 +266,8 @@ class QFInfo:
             
             # Example: sign = -1; digits = [3, 1]
             
-            number = (sign * sum(n * base ** (-i) for i,n in enumerate(digits)) if direction == 'minus' else
-                      sign * sum(n * base ** i for i,n in enumerate(reversed(digits))) if direction == 'plus' else None)
+            number = (sign * sum(n * Decimal(base) ** (-i) for i,n in enumerate(digits)) if direction == 'minus' else
+                      sign * sum(n * Decimal(base) ** i for i,n in enumerate(reversed(digits))) if direction == 'plus' else None)
         
             # Example if direction == 'minus': number = -3.1
             # Example if direction == 'plus':  number = -31
@@ -270,7 +276,7 @@ class QFInfo:
         
         number = parsePart('digits', 3, hasSign=True, direction='minus')
         numberExp = parsePart('exp', 1, hasSign=True, direction='plus')
-        numberFinal = number * base ** numberExp
+        numberFinal = number * Decimal(base) ** numberExp
         
         return {'value': numberFinal, 'mantissa':number, 'exp':numberExp, 'sign': 0 if numberFinal == 0 else -1 if numberFinal < 0 else 1}
 
@@ -403,22 +409,48 @@ class QMatriculeInfo:
         self._matriculeValue = ''.join(map(str, matricule_list))
         return self._matriculeValue
 
-class ReadFromAnnotate:
+class OpenQuestionSource:
+    pass
+
+class ReadFromAnnotate(OpenQuestionSource):
     def __init__(self, annotate_csv_file):
         self.annotate_csv_file = annotate_csv_file
         assert annotate_csv_file.endswith('.csv')
 
-class ReadFromMatriculeMarkCsv:
-    def __init__(self, csv_file, column_name:'QO2'):
+class ReadFromMatriculeMarkCsv(OpenQuestionSource):
+    """
+    For that (open) question, there is a csv file containing two columns
+    MATRICULE, MARK
+    Providing the Mark for each possible Matricule
+    
+    May provide a list, will do the concatenation
+    """
+    def __init__(self, csv_file, column_name='MARK'):
+        self.csv_files = csv_file if isinstance(csv_file, (list, tuple)) else [csv_file]
         self.column_name = column_name
-        assert csv_file.endswith('.csv')
+        self.isread = False
+        assert all(f.endswith('.csv') for f in self.csv_files)
         
+    def read(self):
+        if self.isread:
+            return
         self.Dict = DictCollection()
-        self.Matricule = self.Dict('Matricule')
-        self.Mark = self.Dict('Mark')
+        self.Matricule, self.Mark = self.Dict.keylist('Matricule', 'Mark')
         
-        with open(csv_file) as f:
-            self.Dict['Matricule', 'to', 'Mark'] = {int(s['MATRICULE']): int(s[column_name]) for s in csv.DictReader(f)}
+        D = self.Dict['Matricule', 'to', 'Mark'] = {}
+        for filename in self.csv_files:
+            with open(filename) as f:
+                for d in csv.DictReader(f):
+                    k = int(d['MATRICULE'])
+                    v = Decimal(d[self.column_name]) 
+                    if k in D:
+                        raise ValueError(f'Doublons in with at least {k}')
+                    D[k] = v
+                    
+        self.isread = True
+
+class FromScannedAnnotationsAndMark(OpenQuestionSource):
+    pass
 
 class XLWriter:
     def __init__(self, filename, *, print_created=False):
@@ -498,6 +530,13 @@ class CSVAndXLWriter:
     def __exit__(self, type, value, traceback):
         self.csv.__exit__(type, value, traceback)
         self.xl.__exit__(type, value, traceback)
+        
+def CSVOrXLWriter(*args, **kwargs):
+    try:
+        import openpyxl
+    except ImportError:
+        return CSVWriter(*args, **kwargs)
+    return XLWriter(*args, **kwargs)
         
 class PrintWriter:
     def __init__(self, filename):
@@ -637,6 +676,7 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJECT_NAME:'string that may contain 
                 
                 try:
                     values = info.parseQF()
+                    assert all(isinstance(values[x], Decimal) for x in ('value', 'mantissa', 'exp'))
                     value = values['value'] # values['mantissa'], values['exp'], values['sign']
                     row.extend((values['value'], values['mantissa'], values['exp'], values['sign']))
                     
@@ -664,87 +704,258 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJECT_NAME:'string that may contain 
     globals()['info']('Created', other_writer.filename)
     globals()['info']('Created', writer.filename)
 
-ANSWERS_PHYSS1001_JANVIER_2017_2018 = { # list of [value, min, max, -points minus]
-    'QF5a': [
-        [7.81e-1, 7.71e-1, 7.81e-1, 0],
-        [1.56, 1.54, 1.58, -1]
-    ],
-    'QF6a': [
-        [-3.32e-9, 3.22e-9, 3.42e-9, 0],
-        [-375, 371, 379, -1],
-    ],
-    'QF7a': [
-        [1.33e-8, 1.23e-8, 1.43e-8, 0],
-        [5.32e-8, 5.3e-8, 5.34e-8, -3],
-        [2.66e-8, 2.64e-8, 2.68e-8, -3]
-    ],
-    'QF8a': [
-        [2.5, 2.4, 2.6, 0],
-    ],
-    'QF5b': [
-        [1.53, 1.43, 1.63, 0],
-        [3.06, 3.04, 3.08, -1]
-    ],
-    'QF6b': [
-        [-5.53e-9, 5.43e-9, 5.63e-9, 0],
-        [625, 621, 629, -1]
-    ],
-    'QF7b': [
-        [1.18e-8, 1.08e-8, 1.28e-8, 0],
-        [2.36e-8, 2.34e-8, 2.38e-8, -3],
-        [3.54e-8, 3.52e-8, 3.56e-8, -3],
-        [1.77e-8, 1.75e-8, 1.79e-8, -3],
-    ],
-    'QF8b': [
-        [1.41, 1.31, 1.51, 0],
-    ],
-}
-    
-ANSWERS_PHYSS1001_JUIN_2017_2018 = { 
-    'QF7a': [
-        [0, 0, 0, 0],
-    ],
-    'QF8a': [
-        [6.53e6, 6.43e6, 6.63e6, 0],
-    ],
-    'QF9a': [
-        [2.72e7, 2.62e7, 2.72e7, 0],
-    ],
-    'QF10a': [
-        [2.83e-7, 2.73e-7, 2.93e-7, 0],
-    ],
-}
+def StandardPossibleAnswer(*L):
+    assert len(L) == 4
+    # return {k:v for k,v in zip(('exact', 'min', 'max', 'minus'), L)}
+    return {
+        'exact': L[0],
+        'min': L[1],
+        'max': L[2],
+        'minus': L[3],
+    }
 
-# from list to dict with optional keys
-ANSWERS_PHYSS1001_JUINRATTR_2017_2018 = { # list of [value, min, max, -points minus]
-    'QF7a': [
-        [0, 0, 0, 0],
-    ],
-    'QF8a': [
-        [6.53e6, 6.43e6, 6.63e6, 0],
-    ],
-    'QF9a': [
-        [2.72e7, 2.62e7, 2.72e7, 0],
-    ],
-    'QF10a': [
-        [2.83e-7, 2.73e-7, 2.93e-7, 0],
-    ],
-}
+def RulesStandardPossibleAnswer(*L):
+    assert len(L) == 5
+    # return {k:v for k,v in zip(('exact', 'min', 'max', 'minus', 'rules'), L)}
+    return {
+        'exact': L[0],
+        'min': L[1],
+        'max': L[2],
+        'minus': L[3],
+        'rules': L[4],
+    }
+
+def dict_union(*dicts):
+    X = {}
+    for d in dicts:
+        for k in d:
+            assert k not in K, "please do union of dicts with different values"
+            X[k] = d[k]
+    return X
+
+class UnknownOpenQuestionSource(Exception):
+    pass
+
+class ExamInfo:
+    SERIES:('A', 'B')
+    PROJECT_NAME:'path to project, may contain {serie}' = 'generateurAMC_{serie}'
     
-def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT_NAME:'path to project, may contain {serie}'='generateurAMC_{serie}'):
+    OPEN_QUESTION_SOURCE = {} # All from the marks ticks (from 0 to 10) on the paper (FromScannedAnnotationsAndMark)
+
+class PHYSS1001_JANVIER_2017_2018(ExamInfo):
+    
+    SERIES = ('A', 'B')
+    PROJECT_NAME = 'generateurAMC_{serie}'
+    
+    ANSWERS_= { # list of [value, min, max, -points minus]
+        'QF5a': [
+            StandardPossibleAnswer('7.81e-1', '7.71e-1', '7.81e-1', 0),
+            StandardPossibleAnswer('1.56', '1.54', '1.58', -1)
+        ],
+        'QF6a': [
+            RulesStandardPossibleAnswer('-3.32e-9', '3.22e-9', '3.42e-9', 0, ['SignMinus1']),
+            RulesStandardPossibleAnswer('-375', '371', '379', -1, ['SignMinus1']),
+        ], 
+        'QF7a': [
+            StandardPossibleAnswer('1.33e-8', '1.23e-8', '1.43e-8', 0),
+            StandardPossibleAnswer('5.32e-8', '5.3e-8', '5.34e-8', -3),
+            StandardPossibleAnswer('2.66e-8', '2.64e-8', '2.68e-8', -3)
+        ],
+        'QF8a': [
+            StandardPossibleAnswer('2.5', '2.4', '2.6', 0),
+        ],
+        'QF5b': [
+            StandardPossibleAnswer('1.53', '1.43', '1.63', 0),
+            StandardPossibleAnswer('3.06', '3.04', '3.08', -1)
+        ],
+        'QF6b': [
+            RulesStandardPossibleAnswer('-5.53e-9', '5.43e-9', '5.63e-9', 0, ['SignMinus1']),
+            RulesStandardPossibleAnswer('625', '621', '629', -1, ['SignMinus1']),
+        ], 
+        'QF7b': [
+            StandardPossibleAnswer('1.18e-8', '1.08e-8', '1.28e-8', 0),
+            StandardPossibleAnswer('2.36e-8', '2.34e-8', '2.38e-8', -3),
+            StandardPossibleAnswer('3.54e-8', '3.52e-8', '3.56e-8', -3),
+            StandardPossibleAnswer('1.77e-8', '1.75e-8', '1.79e-8', -3),
+        ],
+        'QF8b': [
+            StandardPossibleAnswer('1.41', '1.31', '1.51', 0),
+        ],
+    }
+    
+    OPEN_QUESTION_SOURCE = {
+        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
+    }
+
+class PHYSS1001_JUIN_2017_2018(ExamInfo):
+    SERIES = ('A', 'B')
+    PROJECT_NAME = 'generateurAMC_{serie}'
+    
+    ANSWERS = { 
+        'QF7a': [
+            {
+                'min': '4.90e-4',
+                'exact':'5.00e-4',
+                'max': '5.10e-4',
+                'minus': 0,
+            },
+        ],
+        'QF8a': [
+            {
+                'min': '2.43e1',
+                'exact': '2.53e1',
+                'max': '2.63e1',
+                'minus': 0,
+            },
+        ],
+        'QF9a': [
+            {
+                'exact': '9.55e4',
+                'min': '9.45e4',
+                'max': '9.65e4',
+                'minus': 0,
+            },
+        ],
+        'QF10a': [
+            {
+                'min': '6.15e3',
+                'exact': '6.25e3',
+                'max': '6.35e3',
+                'minus': 0,
+            },
+        ],
+        'QF11a': [
+            {
+                'min': '2.17e3',
+                'exact': '2.27e3',
+                'max': '2.37e3',
+                'minus': 0
+            },
+        ],
+        'QF12a': [
+            {
+                'min': '5.61e0',
+                'exact': '5.71e0',
+                'max': '5.81e0',
+                'minus': 0
+            },
+        ],
+        
+        'QF7b': [
+            {
+                'min': '9.45e4',
+                'exact': '9.55e4',
+                'max': '9.65e4',
+                'minus': 0,
+            },
+        ],
+        'QF8b': [
+            {
+                'min': '2.43e1',
+                'exact': '2.53e1',
+                'max': '2.63e1',
+                'minus': 0
+            },
+        ],
+        'QF9b': [
+            {
+                'min': '4.90e-4',
+                'exact': '5.00e-4',
+                'max': '5.10e-4',
+                'minus': 0
+            },
+        ],
+        'QF10b': [
+            {
+                'min': '5.61e0',
+                'exact': '5.71e0',
+                'max': '5.81e0',
+                'minus': 0
+            },
+        ],
+        'QF11b': [
+            {
+                'min': '2.17e3',
+                'exact': '2.27e3',
+                'max': '2.37e3',
+                'minus': 0
+            },
+        ],
+        'QF12b': [
+            {
+                'min': '6.15e3',
+                'exact': '6.25e3',
+                'max': '6.35e3',
+                'minus': 0
+            },
+        ],
+    }
+        
+    OPEN_QUESTION_SOURCE = {
+        'QO1': ReadFromMatriculeMarkCsv(['points-P2-a-Q1-results.csv', 'points-P2-b-Q1-results.csv']),
+        # others are written in AMC, ReadFromAnnotate
+    }
+    
+
+class PHYSS1001_JUINRATTR_2017_2018(ExamInfo):
+    SERIES = ('A', )
+    PROJECT_NAME = 'generateurAMC_{serie}'
+    
+    # from list to dict with optional keys
+    ANSWERS_ = { # list of [value, min, max, -points minus]
+        'QF7a': [
+            StandardPossibleAnswer('0', '0', '0', 0),
+        ],
+        'QF8a': [
+            StandardPossibleAnswer('6.53e6', '6.43e6', '6.63e6', 0),
+        ],
+        'QF9a': [
+            StandardPossibleAnswer('2.72e7', '2.62e7', '2.82e7', 0),
+        ],
+        'QF10a': [
+            StandardPossibleAnswer('2.83e-7', '2.73e-7', '2.93e-7', 0),
+        ],
+    }
+    
+def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
+    qf_answers = exam_info.ANSWERS
+    SERIES = exam_info.SERIES
+    PROJECT_NAME = exam_info.PROJECT_NAME
+    open_question_source = exam_info.OPEN_QUESTION_SOURCE
+    
     assert splitext(OUT_FILE)[1] == '', "please do not provide any extension"
     assert len(set(map(str.lower, SERIES))) == len(SERIES), f"no duplicates in series, got {SERIES}"
     
+    # qf_answers
     assert all(len(L) > 0 for L in qf_answers.values())
-    assert all(len(X) == 4 for L in qf_answers.values() for X in L)
-    assert all(minus == 0 for L in qf_answers.values() for i,(value, m, M, minus) in enumerate(L) if i == 0)
-    assert all(minus <= 0 for L in qf_answers.values() for value, m, M, minus in L)
+    assert all(isinstance(X, dict) for L in qf_answers.values() for X in L)
+    assert all(X.get('minus', 0) == 0 for L in qf_answers.values() for i,X in enumerate(L) if i == 0)
+    assert all(X.get('minus', 0) <= 0 for L in qf_answers.values() for X in L)
+    assert all(isinstance(X[key], (Decimal, str)) for L in qf_answers.values() for X in L for key in ('exact', 'min', 'max') if key in X)
+    
+    ## convert to Decimal 
+    for latexname, L in qf_answers.items():
+        for X in L:
+            for key in ('exact', 'min', 'max'):
+                if key in X:
+                    X[key] = Decimal(X[key])
+    
+    ## add min and max if not there
+    for latexname, L in qf_answers.items():
+        for X in L:
+            assert {'min', 'max'} <= X.keys(), f"no minmax in question {latexname}"
+            
+    ## add minus for first question if not there
+    for latexname, L in qf_answers.items():
+        for i,X in enumerate(L):
+            if i == 0:
+                if 'minus' not in X:
+                    X['minus'] = 0
+    
+    assert all(isinstance(X[key], Decimal) for L in qf_answers.values() for X in L for key in ('exact', 'min', 'max') if key in X)
+    assert all(X[key] >= 0 for L in qf_answers.values() for X in L for key in ('min', 'max') if key in X)
 
     # TODO: assert no overlap : assert all(map(no_overlap, qf_answers.values()))
-
-    question_formats = {
-        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
-    }
 
     # should move in qf_answers
     qf_special_treatment = {
@@ -755,6 +966,7 @@ def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT
         'QF9a': {},
         'QF9a': {},
         'QF10a': {},
+        'QF11a': {},
         'QF5b': {},
         'QF6b': {}, # {'SignMinus1'},
         'QF7b': {},
@@ -768,8 +980,8 @@ def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT
     assert all(X <= {'SignMinus1'} for X in qf_special_treatment.values())
     
     data_marks = []
-    
-    with CSVAndXLWriter(OUT_FILE, print_created=True) as writer:
+    errors = []
+    with CSVOrXLWriter(OUT_FILE, print_created=True) as writer:
         writer.writerow(('COPIE','MATRICULE','QUESTION','MARK','ANNOTATION','COMMENTS'))
         for serie in SERIES:
             proj = PROJECT_NAME.format(serie=serie)
@@ -809,19 +1021,22 @@ def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT
                         
                         try:
                             values = info.parseQF()
+                            assert all(isinstance(values[x], Decimal) for x in ('value', 'mantissa', 'exp'))
                             value = values['value'] # values['mantissa'], values['exp'], values['sign']
                             
                             mark = 0
-                            for answer, themin, themax, minus in qf_answers[basename]:
+                            for X in qf_answers[basename]:
+                                rules = X.get('rules', ())
+                                answer, themin, themax, minus = (X[key] for key in ('exact', 'min', 'max', 'minus'))
                                 answer_sign = (0 if answer == 0 else 1 if answer > 0 else -1)
                                 
                                 if themin <= abs(value) <= themax:
                                     m = 5
-                                elif any(themin * 10 ** i <= abs(value) <= themax * 10 ** i for i in irange(-20,20)):
+                                elif any(themin * Decimal(10) ** i <= abs(value) <= themax * Decimal(10) ** i for i in irange(-20,20)):
                                     m = 3
                                 else:
                                     m = 0
-                                if 'SignMinus1' in qf_special_treatment[basename] and values['sign'] != answer_sign:
+                                if 'SignMinus1' in rules and values['sign'] != answer_sign:
                                     m -= 1
                                 if minus:
                                     assert minus < 0
@@ -841,34 +1056,56 @@ def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT
                         except QFInfo.MultipleTicksInColumn:
                             warning(examfull, matricule, basename, 'MultipleTicksInColumn')
                             mark = 0
-                                
+                    
                     elif StandardNames.QO.fullmatch(latexname):
                         basename = latexname
-                        if latexname in question_formats:
-                            fmt = question_formats[latexname]
-                            if isinstance(fmt, ReadFromMatriculeMarkCsv):
-                                mark = fmt.Matricule(matricule).to(fmt.Mark)
-                                annotations = [] # TODO
-                            else:
-                                error("{}{}".format(serie, exam), matricule, latexname, 'UnknownQuestionFormat')
-                                continue
-                        else: # FromScannedAnnotationsAndMark
+                        if latexname not in open_question_source or isinstance(open_question_source[latexname], FromScannedAnnotationsAndMark):
                             try:
                                 info = QOInfo(Dict, dbs, seuil, exam, latexname)
                                 mark = info.correctionValue()
                                 annotations = info.correctionCommentsList()
                             except QOInfo.Error as e:
                                 error(examfull, matricule, basename, e.__class__.__name__)
+                                errors.append(e)
+                                continue
+                        else:
+                            fmt = open_question_source[latexname]
+                            if isinstance(fmt, ReadFromMatriculeMarkCsv):
+                                if not fmt.isread:
+                                    fmt.read()
+                                try:
+                                    mark = fmt.Matricule(matricule).to(fmt.Mark)
+                                except KeyError:
+                                    e = KeyError(f'{matricule} not found in {fmt.csv_files}')
+                                    error(examfull, matricule, basename, e.__class__.__name__)
+                                    errors.append(e) 
+                                    continue
+                                annotations = [] # TODO (code already done in send_mail)
+                            else:
+                                error("{}{}".format(serie, exam), matricule, latexname, 'UnknownOpenQuestionSource')
+                                errors.append(UnknownOpenQuestionSource())
                                 continue
                     else:
                         continue
                     writer.writerow((examfull, matricule, basename, mark, ''.join(chr(ord('A') + i) for i in annotations), str(comments)))
                     data_marks.append((examfull, matricule, basename, mark))
     
+    if errors:
+        return
+    
     # generate pretty xl
     # TODO: make it work for series
     
-    all_questions = set() # not mandatory
+    reductions = {}
+    for serie in SERIES:
+        for examfull, matricule, basename, mark in data_marks:
+            m = StandardNames.QF_SERIE.fullmatch(basename)
+            if m:
+                m.groupdict().keys() == {'num', 'serie'}
+                reduced_name = StandardNames.QF_SERIE_FORMAT(num=m.group('num'), serie='')
+                reductions[basename] = reduced_name
+    
+    all_questions = set()
     student_info = {}
     for examfull, matricule, basename, mark in data_marks:
         if matricule not in student_info:
@@ -882,23 +1119,48 @@ def ComputeMarks(*, OUT_FILE='all_marks', qf_answers, SERIES=('A', 'B'), PROJECT
         student_info[matricule]['questions'][basename] = mark
         all_questions.add(basename) # not mandatory
     
-    assert all(student_info[matricule]['questions'].keys() == all_questions for matricule in student_info) # not mandatory
+    if len(SERIES) <= 1:
+        assert all(student_info[matricule]['questions'].keys() == all_questions for matricule in student_info)
     
     def sort_key(basename):
-        first = (2 if basename.startswith('QF') else 
-                 1 if basename.startswith('QO') else
+        first = (1 if basename.startswith('QO') else
+                 2 if basename.startswith('QF') else
                  3)
         digits = Re('\d+').findall(basename)
         second = int(digits[0]) if digits else 1000
         return first, second
     
-    all_questions = sorted(all_questions, key=sort_key)
+    def sorted_by_key(it):
+        return sorted(it, key=sort_key)
     
-    with CSVAndXLWriter(OUT_FILE + '_pretty', print_created=True) as writer:
-        firstrow = ['MATRICULE', 'EXAM'] + list(all_questions)
+    def only(it):
+        L = list(it)
+        if len(L) != 1:
+            raise ValueError(str(L))
+        return L[0]
+    
+    def only_or_default(it, *, default=None):
+        L = list(it)
+        if len(L) > 1:
+            raise ValueError(str(L))
+        if len(L) == 0:
+            return default
+        return L[0]
+    
+    all_questions_without_series = sorted_by_key(set(reductions.get(q,q) for q in all_questions))
+    all_possible_questions = set(all_questions_without_series) & set(reductions.values())
+    
+    with CSVOrXLWriter(OUT_FILE + '_pretty', print_created=True) as writer:
+        firstrow = ['MATRICULE', 'EXAM'] + list(all_questions_without_series)
         writer.writerow(firstrow)
         for matricule in sorted(map(int, student_info)):
-            row = [matricule, student_info[matricule]['exam']]
-            for question in all_questions:
-                row.append( student_info[matricule]['questions'][question] )
-            writer.writerow(row)
+            writer.writerow(
+                [matricule, student_info[matricule]['exam']]
+                + [
+                    student_info[matricule]['questions'][question_not_reduced]
+                    for question in all_questions_without_series
+                    for question_not_reduced in [
+                        question if question in student_info[matricule]['questions'] else
+                        only(p for p,q in reductions.items() if q == question and p in student_info[matricule]['questions'])
+                    ]
+                ])

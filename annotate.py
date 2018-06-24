@@ -41,6 +41,7 @@ p.add_argument('--zoom', type=Fraction, default=1)
 
 p.add_argument('--from-file', help='Take list of files from first column in from-file csv file (in dir)')
 p.add_argument('--ignore-file', help='Take list of files that are NOT in first column in ignore-file csv file (in dir)')
+# TODO: p.add_argument('--check', action="store_true", help="do create output, just display what's in --from-file")
 # TODO: from-file-header specify the name of the column, implies --from-file can be read with csv.DictReader
 
 p.add_argument('--continue', action='store_true', help='Continue previous work (ignore files in annotate.csv and append to it)')
