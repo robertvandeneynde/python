@@ -18,7 +18,7 @@ a = f(1, 2) # function
 
 ## dot and cross product
 a = (1,2,3) /dot/ (4,5,6) # use as an infix
-a = (1,2,3) |dot| (4,5,6) # can use any binary operator like / | * % << >> (beware of ** that is right to left)
+a = (1,2,3) |dot| (4,5,6) # can use any binary operator like / | + - * % << >> **... (beware of ** that is right to left)
 r = 2 + (1,2,3) /dot/ (4,5,6) # here "/" has priority over + like in normal python
 r = 2 + (1,2,3) *dot* (4,5,6) # for a dot PRODUCT, * seems logical
 r = 2 + dot((1,2,3), (4,5,6)) # still works as a function
@@ -29,7 +29,7 @@ A + B |dot| C # is parsed as (A + B) |dot| C
 ## fractions
 from fractions import Fraction
 frac = infix(Fraction)
-a = 1 + 1 / 3      # floats are messy...
+a = 1 + 1 / 3      # floats are messy... 1.3333333333333333
 a = 1 + 1 /frac/ 3 # just replace '/' by '/frac/' to use Fractions
 b = 2 * (a + 3) /frac/ (a + 1) # nicer complex expressions
 
@@ -38,13 +38,19 @@ b = 2 * (a + 3) /frac/ (a + 1) # nicer complex expressions
 def inclusive(a,b):
     return range(a, b+1)
 
-for i in 2 /inclusive/ 5: # could also write |inclusive| or +inclusive+ or %inclusive% or 
+for i in 2 /inclusive/ 5: # could also write |inclusive| or +inclusive+ or %inclusive% etc.
     print(i) # 2 3 4 5
 
 for i in inclusive(2, 5): # can still be used as function
     print(i) # 2 3 4 5
 
-## pipes : postfix
+## isinstance (Java and Js instanceof)
+isinstance = infix(isinstance)
+assert 1 /isinstance/ int
+assert [] /isinstance/ (list, tuple)
+assert 1 / 2 |isinstance| float
+
+## pipes:  postfix
 @postfix
 def no_zero(L):
     return [x for x in L if x != 0]
@@ -67,6 +73,11 @@ def filter_out(x):
 
 L = [1,2,7,0,2,0] | filter_out(0)
 
+## power
+h = unary(hex)
+o = unary(ord)
+s = h ** o ** 'A' # s = '0x41'
+
 ## function compose
 s = hex(ord('A')) # s = '0x41'
 
@@ -77,12 +88,12 @@ s = display('A') # s = '0x41'
 f = hex *circle* ord # circle = compose
 
 ## partial syntax
-from funcoperators import curry
 def f(x,y):
-    return x + y
+    return x - y
 
+from funcoperators import curry
 g = f /curry/ 5
-y = f(2) # y = 7
+y = f(2) # y = 3
 
 from funcoperators import partially
 @partially
@@ -112,7 +123,16 @@ k = g(2)   # k = a function with one argument
 TODO: add wraps component to all the concepts
 """
 
+__version__ = '0.7'
+__author__ = 'Robert Vanden Eynde'
+
 import unittest
+
+try:
+    import numpy
+    _NO_NUMPY = False
+except ImportError:
+    _NO_NUMPY = True
 
 class BasicTests(unittest.TestCase):
     def test_fundamentals(self):
@@ -135,13 +155,10 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(1, 1 /frac/ 3 * 3)   # precedence
         self.assertEqual(1 |frac| 9, 1 /frac/ 3 / 3) # precedence
         self.assertEqual(1 |frac| 9, 1/frac/3 / 3)   # other style
-
+    
+    @unittest.skipIf(_NO_NUMPY, 'numpy must be installed')
     def test_numpy(self):
-        try:
-            import numpy
-        except ImportError:
-            # numpy is not installed, that's alright
-            return
+        import numpy
         
         dot = infix(numpy.dot)
         cross = infix(numpy.cross)
@@ -160,19 +177,25 @@ class BasicTests(unittest.TestCase):
         self.assertTrue((0,0,-2) |vec_eq| (1,2,0) *cross* (3,4,0)) # beware precedence
 
     def test_unary(self):
-        as_s = prefix(str)
         to_s = postfix(str)
+        as_s = prefix(str)
         be_s = unary(str)
         
         @postfix
         def zfill4(string):
             return string.zfill(4)
 
-        self.assertEqual("5", as_s | 5)
         self.assertEqual("5", 5 | to_s)
         self.assertEqual("0005", 5 | to_s | zfill4) # chaining
-        self.assertEqual("5", be_s | 5)
+        self.assertEqual("5", as_s | 5)
         self.assertEqual("5", 5 | be_s)
+        self.assertEqual("5", be_s | 5)
+        
+        with self.assertRaises(Exception):
+            to_s | 5 
+            
+        with self.assertRaises(Exception):
+            5 | as_s
 
         import operator
         add = partially(operator.add)
@@ -199,6 +222,71 @@ class BasicTests(unittest.TestCase):
         add = partiallymulti(indef)
         self.assertEqual(1+2+7+8, add[1][2,7,8]())
         self.assertEqual(1+2+7+8+7+2, add[1][2,7,8](7,2))
+
+    def test_variety(self):
+        f = infix(lambda x,y:x-y)
+        
+        self.assertEqual(5 +f+ 2, 3)
+        self.assertEqual(5 -f- 2, 3)
+        self.assertEqual(5 *f* 2, 3)
+        self.assertEqual(5 /f/ 2, 3)
+        
+        self.assertEqual(5 |f| 2, 3)
+        self.assertEqual(5 &f& 2, 3)
+        self.assertEqual(5 ^f^ 2, 3)
+        
+        self.assertEqual(5 << f << 2, 3)
+        self.assertEqual(5 >> f >> 2, 3)
+        
+        self.assertEqual(5 **f** 2, -3)
+    
+    def test_pow(self):
+        """
+        ** is right to left, allowing hex(ord(x))
+        to be written hex ** ord ** x
+        or using postfix
+        """
+        h = unary(hex)
+        o = unary(ord)
+        self.assertEqual(h(o('a')), hex(ord('a')))
+        self.assertEqual(h ** o ** 'a', hex(ord('a')))
+        
+        with self.assertRaises(Exception):
+            h | o | 'a'
+
+        f = infix(lambda x,y:x-y)
+        self.assertEqual(5 **f** 2, -3)
+    
+    def test_pow_prefix(self):
+        h = prefix(hex)
+        o = prefix(ord)
+        
+        self.assertEqual(h(o('a')), hex(ord('a')))
+        self.assertEqual(h ** o ** 'a', hex(ord('a')))
+        
+        with self.assertRaises(Exception):
+            h | o | 'a'
+
+    def test_shift(self):
+        h = infix(lambda x,y:x - y)
+        self.assertEqual(5 << h << 2, 3)
+        self.assertEqual(5 >> h >> 2, 3)
+
+        g = postfix(lambda x:x+1)
+        self.assertEqual(1 << g, 2)
+        self.assertEqual(1 >> g, 2)
+        
+        with self.assertRaises(Exception):
+            g << 1
+            g >> 1
+
+        h = prefix(lambda x:x+1)
+        self.assertEqual(h << 1, 2)
+        self.assertEqual(h >> 1, 2)
+        
+        with self.assertRaises(Exception):
+            1 << h
+            1 >> h
     
 class base:
     def __init__(self, function):
@@ -208,7 +296,7 @@ class base:
         return self.function(*args, **kwargs)
 
 class infix(base):
-    '''
+    """
     @infix # as decorator
     def f(X,Y):
         return sum(x*y for x,y in zip(X,Y))
@@ -221,7 +309,7 @@ class infix(base):
     
     dot = infix(np.dot) # from existing function (recommended)
     r = 2 + (1,2,3) *dot* (4,5,6) # clear syntax, for dot product, "*" makes sense
-    '''
+    """
     
     def __ror__(self, other):
         return infix(lambda x, self=self, other=other: self.function(other, x))
@@ -229,19 +317,19 @@ class infix(base):
         return self.function(other)
     
     # __div__ for py2 compability
-    __radd__ = __rsub__ = __rmul__ = __rmatmul__ = __div__ = __rtruediv__ = __rfloordiv__ = __rmod__ = __pow__ = __rand__ = __rxor__ = __rlshift__\
+    __radd__ = __rsub__ = __rmul__ = __rmatmul__ = __div__ = __rtruediv__ = __rfloordiv__ = __rmod__ = __pow__ = __rand__ = __rxor__ = __rlshift__ = __rrshift__\
         = __ror__
     
-    __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __rpow__ = __and__ = __xor__ = __rshift__\
+    __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __rpow__ = __and__ = __xor__ = __rshift__ = __lshift__\
         = __or__
 
 class postfix(base):
-    __radd__ = __rsub__ = __rmul__ = __rmatmul__ = __div__ = __rtruediv__ = __rfloordiv__ = __rmod__ = __pow__ = __rand__ = __rxor__ = __rlshift__\
+    __radd__ = __rsub__ = __rmul__ = __rmatmul__ = __div__ = __rtruediv__ = __rfloordiv__ = __rmod__ = __rpow__ = __rand__ = __rxor__ = __rlshift__ = __rrshift__\
         = __ror__\
         = base.__call__
 
 class prefix(base):
-    __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __rpow__ = __and__ = __xor__ = __rshift__\
+    __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __pow__ = __and__ = __xor__ = __rshift__ = __lshift__\
         = __or__\
         = base.__call__
     
@@ -254,7 +342,7 @@ def _opmethod_base(method, cls):
     return property(lambda self: cls(_partial(method, self)))
 
 def opmethod(method):
-    '''
+    """
     class A:
         @opmethod
         def f(self, x):
@@ -266,7 +354,7 @@ def opmethod(method):
     m = a.f | 1 # use postfixmethod
     m = 1 | a.f # use prefixmethod
     # NOT : a |f| 1 (calls function f) @see infixmethod
-    '''
+    """
     return _opmethod_base(method, unary)
 
 def prefixopmethod(method):
@@ -276,7 +364,7 @@ def postfixopmethod(method):
     return _opmethod_base(method, postfix)
 
 def infixmethod(methodname):
-    '''
+    """
     append = infixmethod('append')
     L = []
     append(L, 5)
@@ -284,23 +372,23 @@ def infixmethod(methodname):
     
     # Don't do this :
     append = unary(list.append) # works, but does not apply on inheritance
-    '''
+    """
     return infix(lambda self, param: getattr(self, methodname)(param))
 
 def _unarymethod_base(methodname, cls):
     return cls(lambda self: getattr(self, methodname)())
 
 def callmethod(methodname):
-    '''
+    """
     keys = callmethod('keys')
     D = {'x': 1}
     print(keys(D))
-    print(keys | D) # use postfixcallmethod to avoid this
-    print(D | keys) # use prefixcallmethod to avoid this
+    print(keys | D) # use postfixcallmethod if you don't want this behavior
+    print(D | keys) # use prefixcallmethod if you don't want this behavior
     
-    # not very practical if only used in (D | keys) notation (D.keys()) is better
+    # not very practical if only used in the parenthesized (D | keys) notation, in that case D.keys() is better
     # but can be usefull to use keys(D) or keys | D
-    '''
+    """
     return _unarymethod_base(methodname, unary)
 
 def prefixcallmethod(methodname):
@@ -315,7 +403,7 @@ curry = infix(_partial)
 curry.__doc__
 
 class partially(base):
-    '''
+    """
     @partially
     def f(x,y,z):
         return x + y + z
@@ -324,7 +412,7 @@ class partially(base):
     r = f[1](2,3)
     r = f[1][2][3]()
     # NOT: f[1,2] (which is give one argument : a tuple)
-    '''
+    """
     def key(self, **kwargs):
         return partially(_partial(self, **kwargs))
     def val(self, *vals):
@@ -337,7 +425,7 @@ class partially(base):
 import inspect as _inspect
 
 class partiallyauto(base):
-    '''
+    """
     works only for methods with N fixed positional args
     
     @partiallyauto
@@ -347,7 +435,7 @@ class partiallyauto(base):
     r = f(1,2,3)
     r = f(1)(2)(3)
     r = f(1)(2,3)
-    '''
+    """
     def __init__(self, function, N=None):
         base.__init__(self, function)
         
@@ -374,15 +462,16 @@ class partiallyauto(base):
         return partiallyauto(_partial(self.function, *args), N=self.N-len(args))
 
 class partiallymulti(partially):
-    ''' Beware, Does not work as expected for function that (may) take tuples !
+    """ Beware, Does not work as expected for function that (may) take tuples !
     
+    @partiallymulti
     def f(x,y,z):
         return x + y + z
     
     r = f(1,2,3)
     r = f[1,2](3)
     r = f[1,2,3]()
-    '''
+    """
     def __getitem__(self, item):
         if isinstance(item, tuple):
             return partiallymulti(_partial(self.function, *item))

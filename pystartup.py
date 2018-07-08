@@ -27,6 +27,7 @@ def log(x, base=None):
         raise ValueError('Log without a base is ambiguous, use log10 or ln')
     return math.log(x, base)
 
+# import *
 import itertools
 from itertools import *
 
@@ -36,17 +37,7 @@ from functools import *
 from operator import *
 from collections import *
 
-from fractions import Fraction
-F = Fraction # from fractions import Fraction as F
-
-from datetime import date, time, datetime, timedelta
-combine = datetime.combine
-
-def french_date(date):
-    return x.strftime("%d/%m/%Y %Hh%M")
-
-datefrench = datefr = date_french = french_date
-
+# import module
 if sys.version_info[0] >= 3:
     import html
 
@@ -62,8 +53,42 @@ import sqlite3
 
 from pprint import pprint
 
+from fractions import Fraction
+frac = F = Fraction # from fractions import Fraction as F
+
+# datetime
+from datetime import date, time, datetime, timedelta
+
+class CallableTimedelta(timedelta):
+    def __call__(self, x):
+        return self * x
+    
+seconds, milliseconds, microseconds, days, hours, minutes, weeks = (CallableTimedelta(**{x:1}) for x in ('seconds', 'milliseconds', 'microseconds', 'days', 'hours', 'minutes', 'weeks'))
+combine = datetime.combine
+now = datetime.now
+today = datetime.today
+
+# funcoperators
+try:
+    from funcoperators import infix, postfix, unary
+except ImportError:
+    infix = postfix = unary = lambda x:x
+
+# datetime utils
+@postfix
+def french_date(date):
+    return date.strftime("%d/%m/%Y %Hh%M")
+
+@postfix
+def french_date_only(date):
+    return date.strftime("%d/%m/%Y")
+
+datefrench = datefr = date_french = frenchdate = french_date
+datefrenchonly = dateonlyfr = date_only_french = frenchdateonly = french_date_only
+
+# operator
 import operator
-ops = {
+ops = operators = {
     '+': operator.add,
     '-': operator.sub,
     '/': operator.truediv,
@@ -110,32 +135,32 @@ if sys.version_info[0] >= 3:
 
 # related to current projects
 try:
-    from appsurmaroute.views import *
+    pass # from mydjangoapp.views import *
+    pass # from mydjangoapp.models import *
 except:
     pass
 
-# map filter
-def lmap(*a, **b):
-    """ return list(map(*a, **b)) """
-    return list(map(*a, **b))
-
-def lfilter(*a, **b):
-    """ return list(filter(*a, **b)) """
-    return list(filter(*a, **b))
-
-if sys.version_info[0] < 3:
+# map, filter
     lmap = map
     lfilter = filter
+else:
+    def lmap(*a, **b):
+        """ return list(map(*a, **b)) """
+        return list(map(*a, **b))
+
+    def lfilter(*a, **b):
+        """ return list(filter(*a, **b)) """
+        return list(filter(*a, **b))
 
 # unicode stuff
 try:
     import uniutils
-    from uniutils import uniname, hexord, uord, uordname, uniline, unicontext
+    from uniutils import * # uniname, hexord, uord, uordname, uniline, unicontext, unilinecat, unibasecat
 except:
     pass
 
 # 3D, gl shaders like
-def vec3(x=None,y=None,z=None):
+def vec3(x=None, y=None, z=None):
     '''
     vec3(1) == array((1,1,1))
     vec3((1,2,3)) == 
@@ -150,22 +175,34 @@ def vec3(x=None,y=None,z=None):
             array((x, y[0], y[1])) if z is None and hasattr(y, '__len__') and len(y) >= 2 else
             array((x,y,z)))
             
+@postfix
 def normalized(x):
     return x / norm(x)
 
+@postfix
+def fmt2(x):
+    return format(x, '.2f')
+fmt = fmt2
+
 # 3D + funcoperators, inline |dot| |cross| product
 try:
-    import funcoperators as fo
-    try:
-        dot = fo.infix(numpy.dot)
-        cross = fo.infix(numpy.cross)
-    except:
-        pass
-    normalized = fo.unary(normalized)
-    f = F = div = frac = fo.infix(Fraction)
-    del fo
+    import funcoperators 
+    from funcoperators import infix, prefix, postfix
 except ImportError:
-    ...
+    pass
+else:
+    tostr, tolist, totuple, toset, tochr, toord = map(postfix, (str, list, tuple, set, chr, ord))
+    
+    from fractions import Fraction
+    F = div = frac = funcoperators.infix(Fraction)
+    
+    try:
+        import numpy
+    except ImportError:
+        pass
+    else:
+        dot = infix(numpy.dot)
+        cross = infix(numpy.cross)
 
 # Statistical stuffs
 def mean(it):
@@ -241,15 +278,20 @@ def elipartial(func, *args, **keywords):
 
 try:
     from funcoperators import compose, circle # (hex |circle| ord)(x) == hex(ord(x))
+    
+    # french
     rond = circle
-except:
+except ImportError:
     pass
 
+@postfix
 def desc(x):
     return {n:getattr(x, n) for n in dir(x) if not hasattr(getattr(x,n), '__call__')}
 
-def irange(*args) -> range:
+@infix
+def irange(*args):
     """
+    @returns range
     list(irange(5)) == [1,2,3,4,5]
     list(irange(1,5)) == [1,2,3,4,5]
     list(irange(2,5)) == [2,3,4,5]
@@ -264,11 +306,10 @@ def irange(*args) -> range:
     return range(r.start, 1+r.stop, r.step)
 
 try:
-    import funcoperators as fo 
-    irange = fo.infix(irange)
-    exclusive = fo.infix(range)
-    del fo
+    import funcoperators
 except ImportError:
     exclusive = range
+else:
+    exclusive = infix(range)
 
 inclusive = irange

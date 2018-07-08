@@ -41,7 +41,7 @@ STATS_GENERATE_TXT = True # if True, include a txt version (stats.txt) (when MAK
 STATS_GENERATE_TEX = False # if True, include a tex version (stats.tex) (when MAKE_STATS = stats.csv)
 STATS_TEX_TEMPLATE = 'faq-base.tex' # if not empty, template tex file, \content and \header will be replaced
 
-STATS_GENERATE_HTML = True # if True, include stats.csv (when MAKE_STATS = stats.csv)
+STATS_GENERATE_HTML = True # if True, include stats.html (when MAKE_STATS = stats.csv)
 STATS_HTML_TEMPLATE = False # 'faq-base.html' # if not empty, template html file, {{ content }} and {{ header }} will be replaced
 
 # Flow control
@@ -58,7 +58,8 @@ CONFIG_XML = 'comments.xml'
 # They must be English style "," separated, '"' if needed
 # If there are decimal points, English style too "1.5" not "1,5".
 # Ie. They can be read with python DictReader(file)
-STUDENT_FILE_CSV = '../201718_PHYS-H-101_SES1_36418.csv' # '201718_PHYS-S-1001_SES1_ecursus.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
+STUDENT_FILE_CSV = '../201718_PHYS-H-101_SES1_36418.csv' # Must have MATRICULE and NETID columns, can have PRENOM and NOM.
+STUDENT_FILE_MUST_HAVE_NAMES = True # Forces the csv file to have PRENOM and NOM
 QUESTIONS_TICKED_FILE_CSV = '' # 'ExamenJanvier2018Brut_numerical_values_refilled.csv' # Must have COPIE, A:MATRICULE, TICKED ";" amc option, "," separated. Pair QO1/QO1COMMENTS
 
 # Directories OPTIONS
@@ -452,7 +453,7 @@ def make_faq_info_from_xml(xml_doc) -> FaqInfo:
             txt = ''.join(c.nodeValue for c in comment.childNodes if c.nodeType == c.TEXT_NODE)
             
             if is_empty(txt):
-                warning(f'<comment name="{name}"> in <question id="{qid}"> have some non empty text')
+                warning(f'<comment name="{name}"> in <question id="{qid}"> have some empty text')
             
             from textwrap import dedent
             lines = dedent(txt).split('\n')
@@ -578,8 +579,13 @@ class StudentInfo:
     def __init__(self):
         with open(STUDENT_FILE_CSV) as f:
             self.Students = [{simplify_key(k):v for k,v in student.items()} for student in csv.DictReader(f)]
-            for s in self.Students:
-                s['MATRICULE'] = str(int(s['MATRICULE'])) # remove zero at beginning
+        
+        for s in self.Students:
+            s['MATRICULE'] = str(int(s['MATRICULE'])) # remove zero at beginning
+        
+        if STUDENT_FILE_MUST_HAVE_NAMES:
+            assert all({'PRENOM', 'NOM'} <= d.keys() for d in self.Students), f"File {STUDENT_FILE_CSV} must have PRENOM and NOM"
+            
         self.Matricule_to_Netid = {s['MATRICULE']: s['NETID'] for s in self.Students}
 
 def printret(x, *args, **kwargs):
@@ -987,12 +993,12 @@ class DbCopyInfo(CopyInfo):
             tags = [letter_of_index(i) for i in indices]
         
         elif isinstance(source, TagSourceCsvImageAnnotate):
-            # TODO: move this code in class CsvImageAnnotateSource(TagSource)
+            # TODO: move this code in class TagSourceCsvImageAnnotate(TagSource)
             
             data = source.data_for_qid(qid)
             
             def basename(path):
-                return path.split('/')[-1]
+                return path.split('/')[-1] # amc stores forward slash even on windows
             
             # for all known scan of student sid for that project, check if there are tags in csv
             possibles_tags = [
@@ -1408,11 +1414,12 @@ for feuille, matricule, netid, prenom, nom in (
                 coms = '\n'.join(
                     "- {}".format(convert_comment(faq.info[qid][tag]).replace('\n', '\n  '))
                     for tag in my_tags[qid]
-                    if convert_comment(faq.info[qid][tag])
+                    if convert_comment(faq.info[qid][tag]).strip()
                 )
             )
             for qid in faq.info
             if my_tags[qid]
+            if any(convert_comment(faq.info[qid][tag]).strip() for tag in my_tags[qid])
         ) + '\n\n' + '\n'.join([
             "Plus d'infos sur la FAQ de l'examen sur l'UV.",
             "L'équipe des assistants",

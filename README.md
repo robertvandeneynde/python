@@ -5,3 +5,5 @@ A user can easily see the versions of the file.
 
 When working on a file (or a dir), a branch is sometimes created with the initial name of the file (indeed, the file can be renamed sometimes), you can see all important versions of the file in that branch.
 Sometimes a tag is created `{BRANCH_NAME}_{TAG}`.
+
+`funcoperators.py` is [on pypi](https://pypi.org/project/funcoperators/) as a single file package.
