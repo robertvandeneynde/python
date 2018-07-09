@@ -36,13 +36,18 @@ def uniname(s):
     """
     >>> uniname('é')
     'LATIN SMALL LETTER E WITH ACUTE'
+    >>> uniname('αβγ')
+    ['GREEK SMALL LETTER ALPHA', 'GREEK SMALL LETTER BETA', 'GREEK SMALL LETTER GAMMA']
     """
     return unicodedata.name(s, '?')
     
 @multiple_makes_lmap
 def hexord(s):
     """
-    hexord('é')
+    >>> hexord('é')
+    '0xe9'
+    >>> hexord('αβγ')
+    ['0x3B1', '0x3B1', '0x3B1']
     """
     return hex(ord(s))
 
@@ -51,6 +56,8 @@ def hexaord(s):
     """
     >>> hexaord('é')
     'e9'
+    >>> hexaord('αβγ')
+    ['3B1', '3B1', '3B1']
     """
     return hex(ord(s))[2:]
 
@@ -59,6 +66,8 @@ def uord(s):
     """
     >>> uord('é')
     'U+00E9'
+    >>> hexaord('αβγ')
+    ['U+03B1', 'U+03B1', 'U+03B1']
     """
     return 'U+' + hex(ord(s))[2:].zfill(4).upper()
 
@@ -67,6 +76,8 @@ def uordname(s):
     """
     >>> uordname('é')
     'U+00E9 LATIN SMALL LETTER E WITH ACUTE'
+    >>> uordname('αβγ')
+    ['U+03B1 GREEK SMALL LETTER ALPHA', 'U+03B2 GREEK SMALL LETTER BETA', 'U+03B3 GREEK SMALL LETTER GAMMA']
     """
     return '{} {}'.format(uord(s), uniname(s))
 

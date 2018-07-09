@@ -261,20 +261,10 @@ def print_matrix(M):
     print('\n'.join(' '.join(row) for row in M))
 
 # functional tools
-# TODO: elipartial(print, ..., '+', ...)(1,2) should print('1 + 2')
-def elipartial(func, *args, **keywords):
-    """ elipartial(pow, ..., 2) == lambda x: x**2 """
-    import itertools
-    def newfunc(*fargs, **fkeywords):
-        newkeywords = keywords.copy()
-        newkeywords.update(fkeywords)
-        return func(*(newfunc.leftmost_args + fargs + newfunc.rightmost_args), **newkeywords)
-    newfunc.func = func
-    args = iter(args)
-    newfunc.leftmost_args = tuple(itertools.takewhile(lambda v: v != Ellipsis, args))
-    newfunc.rightmost_args = tuple(args)
-    newfunc.keywords = keywords
-    return newfunc
+try:
+    from funcoperators import elipartial
+except ImportError:
+    pass
 
 try:
     from funcoperators import compose, circle # (hex |circle| ord)(x) == hex(ord(x))

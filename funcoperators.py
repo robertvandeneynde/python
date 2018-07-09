@@ -115,16 +115,20 @@ r = f(1,2,3)   # r = 6
 r = f(1)(2)(3) # r = 6
 r = f(1)(2,3)  # r = 6
 g = f(1)   # g = a function with two arguments 
-r = g(2,3) # r= 6
+r = g(2,3) # r = 6
 k = g(2)   # k = a function with one argument
 
 # see more examples in the test cases in source code
 
-TODO: add wraps component to all the concepts
+TODO: figure out how to have help(infix(function)) prints help about function
 """
 
 __version__ = '0.7'
 __author__ = 'Robert Vanden Eynde'
+
+# __all__ = __all__
+
+from functools import update_wrapper as _update_wrapper
 
 import unittest
 
@@ -133,7 +137,7 @@ try:
     _NO_NUMPY = False
 except ImportError:
     _NO_NUMPY = True
-
+    
 class BasicTests(unittest.TestCase):
     def test_fundamentals(self):
         # as decorator
@@ -288,9 +292,112 @@ class BasicTests(unittest.TestCase):
             1 << h
             1 >> h
     
+    def test_curry(self):
+        e = pow /curryleft/ 2 # e(x) = 2 ** x
+        self.assertEqual(e(5), 2 ** 5)
+        
+        s = pow /curryright/ 2 # s(x) = x ** 2
+        self.assertEqual(s(5), 5 ** 2)
+        
+        f = '{}/{}/{}'.format |curry| 1 | curry| 2
+        self.assertEqual(f(3), '1/2/3')
+        
+        g = '{}/{}/{}'.format |curry| 1 |curry| 2 |curry| 3
+        self.assertEqual(g(), '1/2/3')
+    
+    @unittest.skip
+    def test_not_enough():
+        show = print | deferredcall(1, ..., 3, sep='/')
+        with self.assertRaises(ValueError):
+            show()
+    
+    def test_eli(self):
+        f1 = lambda x: x ** 2
+        f2 = elipartial(pow, ..., 2)
+        self.assertTrue(all(f1(x) == f2(x) for x in range(-5,5)))
+        
+        tenexp = elipartial(pow, 10) # = pow(10, something)
+        self.assertEqual(tenexp(2), 100)
+        
+        square = elipartial(pow, ..., 2) # = pow(something, 2)
+        self.assertEqual(square(5), 25)
+        
+        self.assertEqual(elipartial(pow, ..., 2)(5), 5 ** 2)
+        self.assertEqual(elipartial(pow, 2, ...)(5), 2 ** 5)
+        self.assertEqual(elipartial('{}/{}/{}'.format, ..., 2, ...)(1,3), '1/2/3')
+        
+        f1 = lambda x: pow(2, x)
+        f4 = pow |deferredcall(2, ...)
+        f2 = pow |latercall(2, ...)
+        f3 = pow |elicurryargs| (2, ...)
+        self.assertTrue(all(f1(x) == f2(x) == f3(x) == f4(x) for x in range(-5,5)))
+        
+        self.assertIs(elicurrycall, latercall)
+        self.assertIs(elicurrycall, deferredcall)
+        
+        square = pow /elicurryargs/ (..., 2) # square(x) = x ** 2
+        self.assertEqual(square(5), 5 ** 2)
+        
+        square = pow |elicurrycall(..., 2) # square(x) = x ** 2
+        self.assertEqual(square(5), 5 ** 2)
+        
+        square = pow |with_arguments(..., 2) # square(x) = x ** 2
+        self.assertEqual(square(5), 5 ** 2)
+        
+        square = pow |deferredcall(..., 2) # square(x) = x ** 2
+        self.assertEqual(square(5), 5 ** 2)
+        
+        self.assertIs(elicurrycall, with_arguments)
+        
+        gen = pow |with_arguments(2, 5) # square(x) = x ** 2
+        self.assertEqual(gen(), 2 ** 5)
+        
+        point = '{}/{}/{}'.format |elicurryargs| (..., 2)
+        self.assertEqual(point(1,3), '1/2/3')
+        
+        point = '{}/{}/{}'.format |elicurryargs| (..., 2, ...)
+        self.assertEqual(point(1,3), '1/2/3')
+        
+        def show(*args, **kwargs):
+            return (args, kwargs)
+        
+        g = show | elicurrycall(1, ..., 3, sep='/')
+        self.assertEqual(g(2), ((1,2,3), {'sep': '/'}))
+        
+        h = show | with_arguments(1, ..., 3, sep='/')
+        self.assertEqual(h(2), ((1,2,3), {'sep': '/'}))
+        
+        self.assertIs(add_args, elicurryargs)
+        self.assertIs(with_arguments, elicurrycall)
+    
+    def test_wraps(self):
+        
+        def f(x,y):
+            """
+            >>> f(5,2)
+            3
+            """
+            return x - y
+        
+        @infix
+        def g(x,y):
+            """
+            >>> f(5,2)
+            3
+            """
+            return x - y
+        
+        h = infix(f)
+        k = infix(g)
+        
+        self.assertEqual(f.__doc__, g.__doc__)
+        self.assertEqual(f.__doc__, h.__doc__)
+        self.assertEqual(f.__doc__, k.__doc__)
+    
 class base:
     def __init__(self, function):
         self.function = function
+        _update_wrapper(self, self.function)
     
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
@@ -489,7 +596,115 @@ def compose(*functions):
 
 circle = compose # (hex |circle| ord)(x) == hex(ord(x))
 
+def elipartial(function, *args, **kwargs):
+    """
+    >>> tenexp = elipartial(pow, 10) # = pow(10, something)
+    >>> tenexp(2)
+    100
+    >>> square = elipartial(pow, ..., 2) # = pow(something, 2)
+    >>> square(5)
+    25
+    >>> elipartial(pow, ..., 2)(5) # 5 ** 2
+    25
+    >>> elipartial(pow, 2, ...)(5) # 2 ** 5
+    32
+    >>> elipartial('{}/{}/{}'.format, ..., 2, ...)(1,3)
+    '1/2/3'
+    >>> from __future__ import print_function
+    >>> show = elipartial(print, 1, ..., 3, sep='/')
+    >>> show()
+    Traceback (most recent call last):
+        ...
+    ValueError: Ellipsis still in elipartial call.
+    >>> show(2)
+    1/2/3
+    """
+    
+    # can't functools.wrap this function, I don't know why.
+    
+    def newfunc(*fargs, **fwargs):
+        itfargs = iter(fargs)
+        
+        def get_next():
+            try:
+                return next(itfargs)
+            except StopIteration:
+                raise ValueError('Ellipsis still in elipartial call.')
+        
+        # beware, generators can't raise StopIteration, so, don't do "newargsbase = tuple(arg if arg is not Ellipsis else next(itfargs) for arg in args)"
+        
+        newargsbase = tuple(arg if arg is not Ellipsis else get_next() for arg in args)
+        remaining = tuple(itfargs)
+        
+        newargs = newargsbase + remaining
+        
+        newkeywords = kwargs.copy()
+        newkeywords.update(fwargs)
+        
+        return function(*newargs, **newkeywords)
+    
+    return newfunc
+
+@infix
+def curryleft(function, arg):
+    """
+    # Only works with functions with two arguments, otherwise, choose curry
+    >>> e = pow /curryleft/ 2 # e(x) = 2 ** x
+    >>> e(5) # 2 ** 5
+    32
+    """
+    return lambda x: function(arg, x)
+
+@infix
+def curryright(function, arg):
+    """
+    >>> e = pow /curryright/ 2 # e(x) = x ** 2
+    >>> e(5) # 5 ** 2
+    25
+    """
+    return lambda x: function(x, arg)
+
+@infix
+def elicurryargs(function, args):
+    """
+    >>> point = '{}/{}/{}'.format |elicurryargs| (..., 2, ...)
+    >>> point(1,3)
+    '1/2/3'
+    """
+    return elipartial(function, *args)
+
+def deferredcall(*args, **kwargs):
+    r"""
+    >>> from __future__ import print_function
+    >>> show = print | with_arguments(1, ..., 3, sep='/') # show is print with arguments 1, something, 3 and keyword argument sep='.'
+    >>> show(2)
+    1/2/3
+    >>> show = print | deferredcall(1, ..., 3, sep='/') # show is print with missing arguments, currently here is 1, something later, 3 and keyword argument sep='.'
+    >>> show(2)
+    1/2/3
+    >>> show(2, 4)
+    1/2/3/4
+    >>> show(2, 4, end=';\n')
+    1/2/3/4;
+    >>> show()
+    Traceback (most recent call last):
+        ...
+    ValueError: Ellipsis still in elipartial call.
+    >>> show = print |with_arguments(1,2, sep='/') |with_arguments(end=';\n')
+    >>> show(3)
+    1/2/3;
+    >>> show()
+    1/2;
+    """
+    return postfix(lambda function: elipartial(function, *args, **kwargs))
+
+provide_left = curryleft
+provide_right = curryright
+add_args = elicurryargs
+with_arguments = deferredcall
+elicurrycall = latercall = deferredcall
+
 if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
     unittest.main()
-    # import doctest
-    # doctest.testmod()
