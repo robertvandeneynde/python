@@ -1,48 +1,56 @@
 """
 Always wanted to add custom operators ?
-a = (1,2,3) /dot/ (4,5,6) # a = 32
+a = (1,2,3) /dot/ (4,5,6)  # a = 32
 
 # works for existing functions, like numpy.dot
 import numpy
 dot = infix(numpy.dot)
-a = (1,2,3) /dot/ (4,5,6) # use as an infix
-a = dot((1,2,3), (4,5,6)) # still works as a function
+a = (1,2,3) /dot/ (4,5,6)  # use as an infix
+a = dot((1,2,3), (4,5,6))  # still works as a function
 
 # or for custom functions as a decorator
+
 @infix
-def f(x,y):
+def crunch(x,y):
+    '''
+    Do a super crunchy operation between two numbers.
+    '''
     return x + 2 * y
 
-a = 1 |f| 2 # operator, can use any binary operator like / | * % << >> (beware of ** that is right to left)
-a = f(1, 2) # function
+a = 1 |crunch| 2  # a = crunch(1, 2)  # can use any binary operator like / | * % << >> (beware of ** that is right to left)
+a = crunch(1, 2)  # still works
+help(crunch.function)  # to get help about the initial function
 
 ## dot and cross product
-a = (1,2,3) /dot/ (4,5,6) # use as an infix
-a = (1,2,3) |dot| (4,5,6) # can use any binary operator like / | + - * % << >> **... (beware of ** that is right to left)
-r = 2 + (1,2,3) /dot/ (4,5,6) # here "/" has priority over + like in normal python
-r = 2 + (1,2,3) *dot* (4,5,6) # for a dot PRODUCT, * seems logical
-r = 2 + dot((1,2,3), (4,5,6)) # still works as a function
+a = (1,2,3) /dot/ (4,5,6)  # use as an infix
+a = (1,2,3) |dot| (4,5,6)  # can use any binary operator like / | + - * % << >> **... (beware of ** that is right to left)
+r = 2 + (1,2,3) /dot/ (4,5,6)  # here "/" has priority over + like in normal python
+r = 2 + (1,2,3) *dot* (4,5,6)  # for a dot PRODUCT, * seems logical
+r = 2 + dot((1,2,3), (4,5,6))  # still works as a function
 
 ## using '|' for low priority
-A + B |dot| C # is parsed as (A + B) |dot| C
+A + B |dot| C  # is parsed as (A + B) |dot| C
 
 ## fractions
 from fractions import Fraction
 frac = infix(Fraction)
-a = 1 + 1 / 3      # floats are messy... 1.3333333333333333
-a = 1 + 1 /frac/ 3 # just replace '/' by '/frac/' to use Fractions
-b = 2 * (a + 3) /frac/ (a + 1) # nicer complex expressions
+a = 1 + 1 / 3       # floats are messy... 1.3333333333333333
+a = 1 + 1 /frac/ 3  # just replace '/' by '/frac/' to use Fractions
+b = 2 * (a + 3) /frac/ (a + 1)  # nicer complex expressions
 
 ## ranges, 2..5 in ruby ?
 @infix
 def inclusive(a,b):
     return range(a, b+1)
 
-for i in 2 /inclusive/ 5: # could also write |inclusive| or +inclusive+ or %inclusive% etc.
-    print(i) # 2 3 4 5
+for i in 2 /inclusive/ 5:  # could also write |inclusive| or +inclusive+ or %inclusive% etc.
+    print(i)  # 2 3 4 5
 
-for i in inclusive(2, 5): # can still be used as function
-    print(i) # 2 3 4 5
+for i in inclusive(2, 5):  # can still be used as function
+    print(i)  # 2 3 4 5
+    
+# range = infix(range)  # don't do that, it breaks code like isinstance(x, range).
+exclusive = infix(range)  # now that's better
 
 ## isinstance (Java and Js instanceof)
 isinstance = infix(isinstance)
@@ -76,16 +84,16 @@ L = [1,2,7,0,2,0] | filter_out(0)
 ## power
 h = unary(hex)
 o = unary(ord)
-s = h ** o ** 'A' # s = '0x41'
+s = h ** o ** 'A'  # s = '0x41'
 
-## function compose
-s = hex(ord('A')) # s = '0x41'
+## function compose (alias circle)
+s = hex(ord('A'))  # s = '0x41'
 
 from funcoperators import compose
 display = hex /compose/ ord
-s = display('A') # s = '0x41'
+s = display('A')  # s = '0x41'
 
-f = hex *circle* ord # circle = compose
+f = hex *circle* ord  # circle = compose
 
 ## partial syntax
 def f(x,y):
@@ -93,7 +101,7 @@ def f(x,y):
 
 from funcoperators import curry
 g = f /curry/ 5
-y = f(2) # y = 3
+y = f(2)  # y = 3
 
 from funcoperators import partially
 @partially
@@ -111,24 +119,49 @@ r = f[1][2][3]()
 def f(x,y,z):
     return x + y + z
 
-r = f(1,2,3)   # r = 6
-r = f(1)(2)(3) # r = 6
-r = f(1)(2,3)  # r = 6
-g = f(1)   # g = a function with two arguments 
-r = g(2,3) # r = 6
-k = g(2)   # k = a function with one argument
+r = f(1,2,3)    # r = 6
+r = f(1)(2)(3)  # r = 6
+r = f(1)(2,3)   # r = 6
+g = f(1)    # g = a function with two arguments 
+r = g(2,3)  # r = 6
+k = g(2)    # k = a function with one argument
+
+# curry 
+e = pow /curryleft/ 2  # e(x) = 2 ** x
+y = e(5)  # y = 2 ** 5
+
+s = pow /curryright/ 2  # s(x) = x ** 2
+y = s(5)  # y = 5 ** 2)
+
+f = '{}/{}/{}'.format |curry| 1 | curry| 2
+y = f(3)  # y = '1/2/3'
+
+g = '{}/{}/{}'.format |curry| 1 |curry| 2 |curry| 3
+y = g()  # '1/2/3'
+
+# elipartial
+tenexp = elipartial(pow, 10)  # = pow(10, something)
+y = tenexp(2)  # 10 ** 2
+square = elipartial(pow, ..., 2)  # = pow(something, 2)
+y = square(5)  # 5 ** 2
+
+# elicurry (alias with_arguments or deferredcall)
+show = print | elicurry(1, ..., 3, sep='/')  # 'show' is 'print' with arguments '1, something, 3' and keyword argument 'sep="."'
+show(2)  # prints 1/2/3
 
 # see more examples in the test cases in source code
 
 TODO: figure out how to have help(infix(function)) prints help about function
 """
+from __future__ import print_function  # for python2
 
-__version__ = '0.7'
+__version__ = '0.8.5'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
 
 from functools import update_wrapper as _update_wrapper
+import sys as _sys
 
 import unittest
 
@@ -155,10 +188,10 @@ class BasicTests(unittest.TestCase):
         frac = infix(Fraction)
 
         self.assertEqual(1, Fraction(1,3) * 3)
-        self.assertEqual(1, (1 |frac| 3) * 3) # parenthesis
-        self.assertEqual(1, 1 /frac/ 3 * 3)   # precedence
-        self.assertEqual(1 |frac| 9, 1 /frac/ 3 / 3) # precedence
-        self.assertEqual(1 |frac| 9, 1/frac/3 / 3)   # other style
+        self.assertEqual(1, (1 |frac| 3) * 3)  # parenthesis
+        self.assertEqual(1, 1 /frac/ 3 * 3)    # precedence
+        self.assertEqual(1 |frac| 9, 1 /frac/ 3 / 3)  # precedence
+        self.assertEqual(1 |frac| 9, 1/frac/3 / 3)    # other style
     
     @unittest.skipIf(_NO_NUMPY, 'numpy must be installed')
     def test_numpy(self):
@@ -178,7 +211,7 @@ class BasicTests(unittest.TestCase):
         
         vec_eq = infix(lambda A,B: all(A == B))
         self.assertTrue((5,7,9) |vec_eq| array((1,2,3)) + array((4,5,6)))
-        self.assertTrue((0,0,-2) |vec_eq| (1,2,0) *cross* (3,4,0)) # beware precedence
+        self.assertTrue((0,0,-2) |vec_eq| (1,2,0) *cross* (3,4,0))  # beware precedence
 
     def test_unary(self):
         to_s = postfix(str)
@@ -190,7 +223,7 @@ class BasicTests(unittest.TestCase):
             return string.zfill(4)
 
         self.assertEqual("5", 5 | to_s)
-        self.assertEqual("0005", 5 | to_s | zfill4) # chaining
+        self.assertEqual("0005", 5 | to_s | zfill4)  # chaining
         self.assertEqual("5", as_s | 5)
         self.assertEqual("5", 5 | be_s)
         self.assertEqual("5", be_s | 5)
@@ -211,7 +244,7 @@ class BasicTests(unittest.TestCase):
         def my_py_func(x,y):
             return x + y
         
-        add = partiallyauto(operator.add, 2) # required "2" because operator.add has no __code__ (no spec)
+        add = partiallyauto(operator.add, 2)  # required "2" because operator.add has no __code__ (no spec)
         self.assertEqual(2+7, add(2,7))
         self.assertEqual(2+7, add(2)(7))
         
@@ -293,10 +326,10 @@ class BasicTests(unittest.TestCase):
             1 >> h
     
     def test_curry(self):
-        e = pow /curryleft/ 2 # e(x) = 2 ** x
+        e = pow /curryleft/ 2  # e(x) = 2 ** x
         self.assertEqual(e(5), 2 ** 5)
         
-        s = pow /curryright/ 2 # s(x) = x ** 2
+        s = pow /curryright/ 2  # s(x) = x ** 2
         self.assertEqual(s(5), 5 ** 2)
         
         f = '{}/{}/{}'.format |curry| 1 | curry| 2
@@ -316,10 +349,10 @@ class BasicTests(unittest.TestCase):
         f2 = elipartial(pow, ..., 2)
         self.assertTrue(all(f1(x) == f2(x) for x in range(-5,5)))
         
-        tenexp = elipartial(pow, 10) # = pow(10, something)
+        tenexp = elipartial(pow, 10)  # = pow(10, something)
         self.assertEqual(tenexp(2), 100)
         
-        square = elipartial(pow, ..., 2) # = pow(something, 2)
+        square = elipartial(pow, ..., 2)  # = pow(something, 2)
         self.assertEqual(square(5), 25)
         
         self.assertEqual(elipartial(pow, ..., 2)(5), 5 ** 2)
@@ -332,24 +365,24 @@ class BasicTests(unittest.TestCase):
         f3 = pow |elicurryargs| (2, ...)
         self.assertTrue(all(f1(x) == f2(x) == f3(x) == f4(x) for x in range(-5,5)))
         
-        self.assertIs(elicurrycall, latercall)
-        self.assertIs(elicurrycall, deferredcall)
+        self.assertIs(elicurry, latercall)
+        self.assertIs(elicurry, deferredcall)
         
-        square = pow /elicurryargs/ (..., 2) # square(x) = x ** 2
+        square = pow /elicurryargs/ (..., 2)  # square(x) = x ** 2
         self.assertEqual(square(5), 5 ** 2)
         
-        square = pow |elicurrycall(..., 2) # square(x) = x ** 2
+        square = pow |elicurry(..., 2)  # square(x) = x ** 2
         self.assertEqual(square(5), 5 ** 2)
         
-        square = pow |with_arguments(..., 2) # square(x) = x ** 2
+        square = pow |with_arguments(..., 2)  # square(x) = x ** 2
         self.assertEqual(square(5), 5 ** 2)
         
-        square = pow |deferredcall(..., 2) # square(x) = x ** 2
+        square = pow |deferredcall(..., 2)  # square(x) = x ** 2
         self.assertEqual(square(5), 5 ** 2)
         
-        self.assertIs(elicurrycall, with_arguments)
+        self.assertIs(elicurry, with_arguments)
         
-        gen = pow |with_arguments(2, 5) # square(x) = x ** 2
+        gen = pow |with_arguments(2, 5)  # square(x) = x ** 2
         self.assertEqual(gen(), 2 ** 5)
         
         point = '{}/{}/{}'.format |elicurryargs| (..., 2)
@@ -361,14 +394,14 @@ class BasicTests(unittest.TestCase):
         def show(*args, **kwargs):
             return (args, kwargs)
         
-        g = show | elicurrycall(1, ..., 3, sep='/')
+        g = show | elicurry(1, ..., 3, sep='/')
         self.assertEqual(g(2), ((1,2,3), {'sep': '/'}))
         
         h = show | with_arguments(1, ..., 3, sep='/')
         self.assertEqual(h(2), ((1,2,3), {'sep': '/'}))
         
         self.assertIs(add_args, elicurryargs)
-        self.assertIs(with_arguments, elicurrycall)
+        self.assertIs(with_arguments, elicurry)
     
     def test_wraps(self):
         
@@ -404,18 +437,18 @@ class base:
 
 class infix(base):
     """
-    @infix # as decorator
+    @infix  # as decorator
     def f(X,Y):
         return sum(x*y for x,y in zip(X,Y))
     
-    r = f((1,2,3), (4,5,6)) # simple call
-    r = (1,2,3) /f/ (4,5,6) # infix call, can use any binary operator, like /, |, *, <<, ^, ...
+    r = f((1,2,3), (4,5,6))  # simple call
+    r = (1,2,3) /f/ (4,5,6)  # infix call, can use any binary operator, like /, |, *, <<, ^, ...
     # if used with **, beware, it's RightToLeft (RTL): a ** b ** c == a ** (b ** c)
 
-    r = 2 + (1,2,3) *f* (4,5,6) # "*" has higher precedence than "+"
+    r = 2 + (1,2,3) *f* (4,5,6)  # "*" has higher precedence than "+"
     
-    dot = infix(np.dot) # from existing function (recommended)
-    r = 2 + (1,2,3) *dot* (4,5,6) # clear syntax, for dot product, "*" makes sense
+    dot = infix(np.dot)  # from existing function (recommended)
+    r = 2 + (1,2,3) *dot* (4,5,6)  # clear syntax, for dot product, "*" makes sense
     """
     
     def __ror__(self, other):
@@ -457,9 +490,9 @@ def opmethod(method):
         def __init__(self, p):
             self.p = p
     a = A(8)
-    m = a.f(1)  # simple call
-    m = a.f | 1 # use postfixmethod
-    m = 1 | a.f # use prefixmethod
+    m = a.f(1)   # simple call
+    m = a.f | 1  # use postfixmethod
+    m = 1 | a.f  # use prefixmethod
     # NOT : a |f| 1 (calls function f) @see infixmethod
     """
     return _opmethod_base(method, unary)
@@ -478,7 +511,7 @@ def infixmethod(methodname):
     L |append| 5
     
     # Don't do this :
-    append = unary(list.append) # works, but does not apply on inheritance
+    append = unary(list.append)  # works, but does not apply on inheritance
     """
     return infix(lambda self, param: getattr(self, methodname)(param))
 
@@ -490,8 +523,8 @@ def callmethod(methodname):
     keys = callmethod('keys')
     D = {'x': 1}
     print(keys(D))
-    print(keys | D) # use postfixcallmethod if you don't want this behavior
-    print(D | keys) # use prefixcallmethod if you don't want this behavior
+    print(keys | D)  # use postfixcallmethod if you don't want this behavior
+    print(D | keys)  # use prefixcallmethod if you don't want this behavior
     
     # not very practical if only used in the parenthesized (D | keys) notation, in that case D.keys() is better
     # but can be usefull to use keys(D) or keys | D
@@ -507,7 +540,25 @@ def postfixcallmethod(methodname):
 from functools import partial as _partial, wraps as _wraps
 
 curry = infix(_partial)
-curry.__doc__
+
+@infix
+def curryleft(function, arg):
+    """
+    # Only works with functions with two arguments, otherwise, choose curry
+    >>> e = pow /curryleft/ 2  # e(x) = 2 ** x
+    >>> e(5)  # 2 ** 5
+    32
+    """
+    return lambda x: function(arg, x)
+
+@infix
+def curryright(function, arg):
+    """
+    >>> e = pow /curryright/ 2  # e(x) = x ** 2
+    >>> e(5)  # 5 ** 2
+    25
+    """
+    return lambda x: function(x, arg)
 
 class partially(base):
     """
@@ -547,12 +598,18 @@ class partiallyauto(base):
         base.__init__(self, function)
         
         try:
-            spec = _inspect.getargspec(self.function)
+            if _sys.version_info[0] == 2:
+                spec = _inspect.getargspec(self.function)
+            else:
+                spec = _inspect.getfullargspec(self.function)
         except TypeError:
             spec = None
         
         if spec:
-            assert spec.keywords is None
+            if _sys.version_info[0] == 2:
+                assert spec.keywords is None
+            else:
+                assert spec.kwonlyargs == [] and spec.kwonlydefaults is None
             assert N is not None or not spec.defaults
             
         if N is not None:
@@ -594,19 +651,19 @@ def compose(*functions):
     """
     return functools.reduce(lambda f, g: lambda *args, **kwargs: f(g(*args, **kwargs)), functions, lambda x: x)
 
-circle = compose # (hex |circle| ord)(x) == hex(ord(x))
+circle = compose  # (hex |circle| ord)(x) == hex(ord(x))
 
 def elipartial(function, *args, **kwargs):
     """
-    >>> tenexp = elipartial(pow, 10) # = pow(10, something)
+    >>> tenexp = elipartial(pow, 10)  # = pow(10, something)
     >>> tenexp(2)
     100
-    >>> square = elipartial(pow, ..., 2) # = pow(something, 2)
+    >>> square = elipartial(pow, ..., 2)  # = pow(something, 2)
     >>> square(5)
     25
-    >>> elipartial(pow, ..., 2)(5) # 5 ** 2
+    >>> elipartial(pow, ..., 2)(5)  # 5 ** 2
     25
-    >>> elipartial(pow, 2, ...)(5) # 2 ** 5
+    >>> elipartial(pow, 2, ...)(5)  # 2 ** 5
     32
     >>> elipartial('{}/{}/{}'.format, ..., 2, ...)(1,3)
     '1/2/3'
@@ -646,25 +703,6 @@ def elipartial(function, *args, **kwargs):
     return newfunc
 
 @infix
-def curryleft(function, arg):
-    """
-    # Only works with functions with two arguments, otherwise, choose curry
-    >>> e = pow /curryleft/ 2 # e(x) = 2 ** x
-    >>> e(5) # 2 ** 5
-    32
-    """
-    return lambda x: function(arg, x)
-
-@infix
-def curryright(function, arg):
-    """
-    >>> e = pow /curryright/ 2 # e(x) = x ** 2
-    >>> e(5) # 5 ** 2
-    25
-    """
-    return lambda x: function(x, arg)
-
-@infix
 def elicurryargs(function, args):
     """
     >>> point = '{}/{}/{}'.format |elicurryargs| (..., 2, ...)
@@ -673,13 +711,13 @@ def elicurryargs(function, args):
     """
     return elipartial(function, *args)
 
-def deferredcall(*args, **kwargs):
+def elicurry(*args, **kwargs):
     r"""
     >>> from __future__ import print_function
-    >>> show = print | with_arguments(1, ..., 3, sep='/') # show is print with arguments 1, something, 3 and keyword argument sep='.'
+    >>> show = print | with_arguments(1, ..., 3, sep='/')  # show is print with arguments 1, something, 3 and keyword argument sep='.'
     >>> show(2)
     1/2/3
-    >>> show = print | deferredcall(1, ..., 3, sep='/') # show is print with missing arguments, currently here is 1, something later, 3 and keyword argument sep='.'
+    >>> show = print | deferredcall(1, ..., 3, sep='/')  # show is print with missing arguments, currently here is 1, something later, 3 and keyword argument sep='.'
     >>> show(2)
     1/2/3
     >>> show(2, 4)
@@ -701,8 +739,8 @@ def deferredcall(*args, **kwargs):
 provide_left = curryleft
 provide_right = curryright
 add_args = elicurryargs
-with_arguments = deferredcall
-elicurrycall = latercall = deferredcall
+with_arguments = elicurry
+latercall = deferredcall = elicurry
 
 if __name__ == '__main__':
     import doctest
