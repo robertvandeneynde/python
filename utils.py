@@ -49,3 +49,30 @@ def to_interv(Ll):
         if len(l) > 2:
             del l[1:-1]
     return Ll
+def natural_exp_format(x):
+    if x < 0:
+        return '-' + natural_exp_format(-x)
+    s = format(x, 'e')
+
+    base, exp = s.split('e')
+    exp = int(exp)
+
+    if -3 <= int(exp) <= 3:
+         a,b = base.split('.')
+         if int(exp) > 0:
+             for i in range(int(exp)):
+                 a += b[0]
+                 b = b[1:]
+         elif int(exp) < 0:
+             for i in range(-int(exp)):
+                 if a:
+                     b = a[-1] + b
+                     a = a[:-1]
+                 else:
+                     b = '0' + b
+                     
+                     
+         return a + '.' + b
+    else:
+        return s
+    

@@ -1,3 +1,6 @@
+"""
+Super smash bros melee, random character picker
+"""
 import random, sys
 noms = 'dr_mario mario luigi bowser peach yoshi dk captain_falcon ganondorf falco fox ness ice_climbers kirby samus zelda link link_enfant peach pikachu rondoudou mewto mr_game_and_watch marth roy'.split()
 

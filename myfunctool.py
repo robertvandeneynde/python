@@ -1,3 +1,7 @@
+"""
+@deprecated, see pip install funcoperators
+"""
+
 import itertools
 
 # http://stackoverflow.com/questions/11173660/can-one-partially-apply-the-second-argument-of-a-function-that-takes-no-keyword

@@ -22,11 +22,18 @@ a = crunch(1, 2)  # still works
 help(crunch.function)  # to get help about the initial function
 
 ## dot and cross product
+import numpy
+dot = infix(numpy.dot)
+
 a = (1,2,3) /dot/ (4,5,6)  # use as an infix
 a = (1,2,3) |dot| (4,5,6)  # can use any binary operator like / | + - * % << >> **... (beware of ** that is right to left)
 r = 2 + (1,2,3) /dot/ (4,5,6)  # here "/" has priority over + like in normal python
 r = 2 + (1,2,3) *dot* (4,5,6)  # for a dot PRODUCT, * seems logical
 r = 2 + dot((1,2,3), (4,5,6))  # still works as a function
+
+cross = infix(numpy.cross)
+tau = (1,2) /cross/ (3,4)
+Z = (1,2,3) /cross/ (4,5,6)
 
 ## using '|' for low priority
 A + B |dot| C  # is parsed as (A + B) |dot| C
@@ -165,7 +172,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.9.2'
+__version__ = '0.9.3'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -833,7 +840,7 @@ class bracket(base):
             return bracket(elipartial(self.function, *item))
         return bracket(elipartial(self.function, item))
 
-bracket = elipartiallymulti
+elipartiallymulti = bracket
 
 @infix
 def elicurryargs(function, args):

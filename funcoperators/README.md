@@ -46,11 +46,18 @@ Beware if you use `**`, the operator is right to left:
 
 Dot and cross products are used heavily in mathematics and physics as an infix operator `·` or `×`.
 
+    import numpy
+    dot = infix(numpy.dot)
+
     a = (1,2,3) /dot/ (4,5,6)
     a = (1,2,3) |dot| (4,5,6)  # same 
     r = 2 + (1,2,3) /dot/ (4,5,6)  # here "/" has priority over + like in normal python
     r = 2 + (1,2,3) *dot* (4,5,6)  # for a dot PRODUCT, '*' seems logical
     r = 2 + dot((1,2,3), (4,5,6))  # still works as a function
+    
+    cross = infix(numpy.cross)
+    tau = (1,2) /cross/ (3,4)
+    Z = (1,2,3) /cross/ (4,5,6)
 
 # using '|' for low priority
 
@@ -118,7 +125,7 @@ The library can be used for that.
 # pipe factory
 
 Sometimes, pipes want extra information, for example in our last example, `no_zero` is a special case of a pipe that filters out a value,
-use the `pipe factory` recipe like so:
+use the _pipe factory_ recipe like so:
 
     def filter_out(x):
         @postfix

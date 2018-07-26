@@ -1,3 +1,6 @@
+"""
+@deprecated, see rubik/
+"""
 import random
 
 # quick functions
