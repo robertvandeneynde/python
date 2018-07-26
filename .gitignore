@@ -1,4 +1,8 @@
 __pycache__
 *.pyc
 rubiks/*
+
+# commands are just shortcuts (ln -s group_by_prefix.py group-by-prefix)
+group-by-prefix.py
 strip-prefix.py
+.directory
