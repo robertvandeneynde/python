@@ -86,13 +86,13 @@ Now you can even write `for i in 1 /inclusive/ 5` in python.
     for i in inclusive(2, 5):
         print(i)  # 2 3 4 5
 
-However, redefining range = infix(range) is a bad idea because it would break code like `isinstance(x, range)`.
+However, redefining `range = infix(range)` is a bad idea because it would break code like `isinstance(x, range)`.
 In that particuliar example, I would choose `exclusive = infix(range)`.
 
 # isinstance (Java and Js instanceof)
 
 In Java and Javascript, testing the class of an object is done via `x instanceof Class`,
-the python builtin `isinstance` could be enhanced with infix notation or renamed to `instanceof`.
+the python builtin `isinstance` could be enhanced with infix notation or be renamed to `instanceof`.
 
     isinstance = infix(isinstance)
     assert 1 /isinstance/ int
@@ -206,9 +206,9 @@ The library also proposes to use Python's `...` (`Ellipsis`) as a natural placeh
     square = elipartial(pow, ..., 2)  # = pow(something, 2)
     y = square(5)  # 5 ** 2
 
-If you like the `partially` and `partiallymulti` syntax, there is `elipartiallymulti`:
+If you like the `partially` and `partiallymulti` syntax, there is `bracket`:
 
-    @elipartiallymulti
+    @bracket
     def f(x,y,z):
         return x - y + 2 * z
     

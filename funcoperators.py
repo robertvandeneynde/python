@@ -165,7 +165,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.9.1'
+__version__ = '0.9.2'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
