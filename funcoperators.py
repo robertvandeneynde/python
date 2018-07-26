@@ -81,6 +81,11 @@ def filter_out(x):
 
 L = [1,2,7,0,2,0] | filter_out(0)
 
+def mapwith(function):
+    return postfix(lambda *its: map(function, *its))
+
+s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
+
 ## power
 h = unary(hex)
 o = unary(ord)
@@ -106,18 +111,18 @@ y = f(2)  # y = 3
 from funcoperators import partially
 @partially
 def f(x,y,z):
-    return x + y + z
+    return x - y + 2 * z
 
 r = f(1,2,3)
 r = f[1](2,3)
 r = f[1][2][3]()
-# NOT: f[1,2] which will give one argument: a tuple
+# This doesn't work: f[1,2] becaues it gives only one argument: a tuple
 
 # partiallyauto works only for methods with N fixed positional args
 
 @partiallyauto
 def f(x,y,z):
-    return x + y + z
+    return x - y + 2 * z
 
 r = f(1,2,3)    # r = 6
 r = f(1)(2)(3)  # r = 6
@@ -132,6 +137,10 @@ y = e(5)  # y = 2 ** 5
 
 s = pow /curryright/ 2  # s(x) = x ** 2
 y = s(5)  # y = 5 ** 2)
+
+p = infix(pow)  # p(x,y) = pow(x,y)
+e = 2 / p  # e(x) = pow(2, x)
+y = e(5)  # y = 2 ** 5
 
 f = '{}/{}/{}'.format |curry| 1 | curry| 2
 y = f(3)  # y = '1/2/3'
@@ -151,11 +160,12 @@ show(2)  # prints 1/2/3
 
 # see more examples in the test cases in source code
 
+TODO: add Waiting for Left side like in pip install infix
 TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.8.5'
+__version__ = '0.9.1'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -338,8 +348,7 @@ class BasicTests(unittest.TestCase):
         g = '{}/{}/{}'.format |curry| 1 |curry| 2 |curry| 3
         self.assertEqual(g(), '1/2/3')
     
-    @unittest.skip
-    def test_not_enough():
+    def test_not_enough(self):
         show = print | deferredcall(1, ..., 3, sep='/')
         with self.assertRaises(ValueError):
             show()
@@ -427,6 +436,42 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(f.__doc__, h.__doc__)
         self.assertEqual(f.__doc__, k.__doc__)
     
+    def test_partiallybase(self):
+        @bracket
+        def f(x,y,z):
+            return x - y + 2 * z
+        
+        g = f[..., 2]
+        self.assertEqual(g(1,3), 5)
+        
+        with self.assertRaises(Exception):
+            g(1)
+        
+        g = f[..., 2, ...]
+        self.assertEqual(g(1,3), 5)
+        
+        with self.assertRaises(Exception):
+            g(1)
+            
+        self.assertIs(bracket, elipartiallymulti)
+            
+    def test_partiallymulti(self):
+        @partially
+        def sum_plus(a_tuple, constant):
+            return sum(a_tuple) + constant
+        
+        self.assertEqual(sum_plus((1,2,3), 10), 16)
+        g = sum_plus[1,2,3]
+        self.assertEqual(g(10), 16)
+        
+        @partially
+        def f(x,y,z):
+            return x - y + 2 * z
+        
+        with self.assertRaises(Exception):
+            g = f[1,2]
+            g(3)
+    
 class base:
     def __init__(self, function):
         self.function = function
@@ -434,6 +479,7 @@ class base:
     
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
+
 
 class infix(base):
     """
@@ -453,6 +499,7 @@ class infix(base):
     
     def __ror__(self, other):
         return infix(lambda x, self=self, other=other: self.function(other, x))
+
     def __or__(self, other):
         return self.function(other)
     
@@ -472,7 +519,7 @@ class prefix(base):
     __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __pow__ = __and__ = __xor__ = __rshift__ = __lshift__\
         = __or__\
         = base.__call__
-    
+
 class unary(postfix, prefix):
     pass
 
@@ -483,17 +530,21 @@ def _opmethod_base(method, cls):
 
 def opmethod(method):
     """
-    class A:
-        @opmethod
-        def f(self, x):
-            return self.p + x + 1
-        def __init__(self, p):
-            self.p = p
-    a = A(8)
-    m = a.f(1)   # simple call
-    m = a.f | 1  # use postfixmethod
-    m = 1 | a.f  # use prefixmethod
-    # NOT : a |f| 1 (calls function f) @see infixmethod
+    >>> class A:
+    ...    @opmethod
+    ...    def f(self, x):
+    ...        return self.p + x + 1
+    ...    def __init__(self, p):
+    ...        self.p = p
+    
+    >>> a = A(8)
+    >>> a.f(1)   # simple call
+    10
+    >>> a.f | 1  # use postfixmethod instead of opmethod if you only want this behavior
+    10
+    >>> 1 | a.f  # use prefixmethod instead of opmethod if you only want this behavior
+    10
+    >>> # This doesn't work: a |f| 1 because it calls function f (@see infixmethod)
     """
     return _opmethod_base(method, unary)
 
@@ -510,7 +561,7 @@ def infixmethod(methodname):
     append(L, 5)
     L |append| 5
     
-    # Don't do this :
+    # Don't do this:
     append = unary(list.append)  # works, but does not apply on inheritance
     """
     return infix(lambda self, param: getattr(self, methodname)(param))
@@ -537,7 +588,7 @@ def prefixcallmethod(methodname):
 def postfixcallmethod(methodname):
     return _unarymethod_base(methodname, postfix)
 
-from functools import partial as _partial, wraps as _wraps
+from functools import partial as _partial
 
 curry = infix(_partial)
 
@@ -562,21 +613,57 @@ def curryright(function, arg):
 
 class partially(base):
     """
-    @partially
-    def f(x,y,z):
-        return x + y + z
+    >>> @partially
+    ... def f(x,y,z):
+    ...     return x - y + 2 * z
     
-    r = f(1,2,3)
-    r = f[1](2,3)
-    r = f[1][2][3]()
-    # NOT: f[1,2] (which is give one argument : a tuple)
+    >>> f(1,2,3)
+    5
+    >>> g = f[1]
+    >>> g(2,3)
+    5
+    >>> f[1](2,3)
+    5
+    >>> f[1][2][3]()
+    5
+    >>> # This doesn't work: f[1,2] because this gives which is give one argument: a tuple (@see partiallymulti)
+    
+    >>> # If you don't like "[]", there is also a syntax with methods
+    >>> g = f.val(1)  # provide the value 1
+    >>> g(2,3)
+    5
+    >>> g = f.val(1, 2) # provide the values 1, 2
+    >>> g(3)
+    5
+    >>> # keyword argument are nice too 
+    >>> f(x=1, y=2, z=3)
+    5
+    >>> g = f.key(y=2)  # provide key argument y=2
+    >>> g(x=1, z=3)
+    5
+    >>> g = f.part(1, z=3)  # provide positional arguments 1, and keyword argument z=2
+    >>> g(2)
+    5
+    >>> g = f.val(1).key(z=3)  # provide positional arguments 1, and keyword argument z=2
+    >>> g(2)
+    5
+    >>> myprint = partially(print).key(sep="/")
+    >>> myprint(1,2,3)
+    1/2/3
+    >>> from functools import partial
+    >>> myprint = partial(print, sep="/")
+    >>> myprint(1,2,3)
+    1/2/3
     """
     def key(self, **kwargs):
         return partially(_partial(self, **kwargs))
+    
     def val(self, *vals):
-        return partially(_partial(self, **kwargs))
+        return partially(_partial(self, *vals))
+    
     def part(self, *args, **kwargs):
         return partially(_partial(self, *args, **kwargs))
+    
     def __getitem__(self, item):
         return partially(_partial(self.function, item))
 
@@ -584,15 +671,21 @@ import inspect as _inspect
 
 class partiallyauto(base):
     """
-    works only for methods with N fixed positional args
+    Works only for methods with N fixed positional args
     
-    @partiallyauto
-    def f(x,y,z):
-        return x + y + z
+    >>> @partiallyauto
+    ... def f(x,y,z):
+    ...    return x - y + 2 * z
     
-    r = f(1,2,3)
-    r = f(1)(2)(3)
-    r = f(1)(2,3)
+    >>> f(1,2,3)
+    5
+    >>> g = f(1)
+    >>> g(2,3)
+    5
+    >>> f(1)(2,3)
+    5
+    >>> f(1)(2)(3)
+    5
     """
     def __init__(self, function, N=None):
         base.__init__(self, function)
@@ -628,18 +721,25 @@ class partiallyauto(base):
 class partiallymulti(partially):
     """ Beware, Does not work as expected for function that (may) take tuples !
     
-    @partiallymulti
-    def f(x,y,z):
-        return x + y + z
+    >>> @partiallymulti
+    ... def f(x,y,z):
+    ...     return x - y + 2 * z
     
-    r = f(1,2,3)
-    r = f[1,2](3)
-    r = f[1,2,3]()
+    >>> f(1,2,3)
+    5
+    >>> g = f[1,2]
+    >>> g(3)
+    5
+    >>> f[1,2](3)
+    5
+    >>> f[1,2,3]()
+    5
     """
     def __getitem__(self, item):
         if isinstance(item, tuple):
             return partiallymulti(_partial(self.function, *item))
         return partiallymulti(_partial(self.function, item))
+
 
 import functools
 
@@ -701,6 +801,39 @@ def elipartial(function, *args, **kwargs):
         return function(*newargs, **newkeywords)
     
     return newfunc
+
+class bracket(base):
+    """
+    >>> @bracket
+    ... def f(x,y,z):
+    ...     return x - y + 2 * z
+    
+    >>> f(1,2,3)
+    5
+    >>> g = f[1]
+    >>> g(2,3)
+    5
+    >>> f[1](2,3)
+    5
+    >>> g = f[1, ..., 3]
+    >>> g(2)
+    5
+    """
+    def key(self, **kwargs):
+        return partially(elipartial(self, **kwargs))
+    
+    def val(self, *vals):
+        return partially(elipartial(self, *vals))
+    
+    def part(self, *args, **kwargs):
+        return partially(elipartial(self, *args, **kwargs))
+    
+    def __getitem__(self, item):
+        if isinstance(item, tuple):
+            return bracket(elipartial(self.function, *item))
+        return bracket(elipartial(self.function, item))
+
+bracket = elipartiallymulti
 
 @infix
 def elicurryargs(function, args):

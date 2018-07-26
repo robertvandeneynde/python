@@ -126,7 +126,12 @@ use the `pipe factory` recipe like so:
             return [y for y in L if y != x]
         return f
 
-    L = [1,2,7,0,2,0] | filter_out(0)  # Y == [2,3,8,3]
+    L = [1,2,7,0,2,0] | filter_out(0)  # L == [2,3,8,3]
+    
+    def mapwith(function):
+        return postfix(lambda *its: map(function, *its))
+
+    s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
 
 # function compose (alias circle)
 
@@ -154,12 +159,22 @@ The library adds sugar to functools, called `curry`, the names comes from other 
     from funcoperators import partially
     @partially
     def f(x,y,z):
-        return x + y + z
+        return x - y + 2 * z
 
     r = f(1,2,3)
+    g = f[1]  # g = a function with two arguments: x,y
+    r = g(2,3)
     r = f[1](2,3)
     r = f[1][2][3]()
-    # NOT: f[1,2] which will give one argument: a tuple
+    # This does not work: f[1,2] because it gives one argument: a tuple (@see partiallymulti)
+    
+    @partiallymulti
+    def f(x,y,z):
+        return x - y + 2 * z
+    
+    r = f(1,2,3)
+    g = f[1,2]  # g = a function with one argument: z
+    r = g(3)
 
 # partiallyauto
 
@@ -168,7 +183,7 @@ In functional languages, function composition is sometimes not dissociable from 
 
     @partiallyauto
     def f(x,y,z):
-        return x + y + z
+        return x - y + 2 * z
 
     r = f(1,2,3)    # r = 6
     r = f(1)(2)(3)  # r = 6
@@ -190,6 +205,16 @@ The library also proposes to use Python's `...` (`Ellipsis`) as a natural placeh
     y = tenexp(2)  # 10 ** 2
     square = elipartial(pow, ..., 2)  # = pow(something, 2)
     y = square(5)  # 5 ** 2
+
+If you like the `partially` and `partiallymulti` syntax, there is `elipartiallymulti`:
+
+    @elipartiallymulti
+    def f(x,y,z):
+        return x - y + 2 * z
+    
+    r = f(1,2,3)
+    g = f[1, ..., 3]  # g = a function with one argument: y
+    r = g(2)
     
 Here as a more complex example, we define `show` to be the `print` function with arguments `1`, _something_, `3` and keyword argument `sep='.'`.
 

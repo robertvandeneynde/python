@@ -47,7 +47,7 @@ def hexord(s):
     >>> hexord('é')
     '0xe9'
     >>> hexord('αβγ')
-    ['0x3B1', '0x3B1', '0x3B1']
+    ['0x3b1', '0x3b2', '0x3b3']
     """
     return hex(ord(s))
 
@@ -57,19 +57,19 @@ def hexaord(s):
     >>> hexaord('é')
     'e9'
     >>> hexaord('αβγ')
-    ['3B1', '3B1', '3B1']
+    ['3b1', '3b2', '3b3']
     """
-    return hex(ord(s))[2:]
+    return format(ord(s), 'x') # = hex(ord(s))[2:]
 
 @multiple_makes_lmap
 def uord(s):
     """
     >>> uord('é')
     'U+00E9'
-    >>> hexaord('αβγ')
-    ['U+03B1', 'U+03B1', 'U+03B1']
+    >>> uord('αβγ')
+    ['U+03B1', 'U+03B2', 'U+03B3']
     """
-    return 'U+' + hex(ord(s))[2:].zfill(4).upper()
+    return 'U+{:04X}'.format(ord(s)) # = 'U+' + hex(ord(s))[2:].zfill(4).upper()
 
 @multiple_makes_lmap
 def uordname(s):
@@ -186,7 +186,10 @@ def unicontext(s, width=5):
     print('       ' + ' '.join('v' if i == ord(s) % 16 else ' ' for i in range(16)))
     print('       ' + ' '.join(hex(i)[2:].upper() for i in range(16)))
     for n in (b + i * 16 for i in range(-width,+width+1)):
-        if n >= 0x10:
+        if n < 0x10: # contains \n and \t annoying to print
+            if n >= 0:
+                print(('U+' if n != b else '>>') + '0000' + 32 * ' ')
+        else:
             print(('U+' if n != b else '>>') + hex(n)[2:].zfill(4).upper() + ' ' +
                    ' '.join((greenizebold if n + i == ord(s) else lambda x:x)(chr(n + i))
                             for i in range(16)))

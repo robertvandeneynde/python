@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 import re
 def get_property(prop, project):
-    with open(project + '/__init__.py') as f:
+    with open(project + '.py') as f:
         return re.search(r'{}\s*=\s*[\'"]([^\'"]*)[\'"]'.format(prop), f.read()).group(1)
 
 setup(
@@ -17,6 +17,7 @@ setup(
     long_description_content_type="text/markdown",
     author='Robert Vanden Eynde',
     author_email='robertvandeneynde@hotmail.com',
-    packages=['funcoperators'], # setuptools.find_packages() 'mymath.adv'
+    # packages=['funcoperators'], # setuptools.find_packages() 'mymath.adv'
+    py_modules=['funcoperators'],
     url='https://github.com/robertvandeneynde/python',
 )

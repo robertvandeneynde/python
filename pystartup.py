@@ -134,13 +134,14 @@ if sys.version_info[0] >= 3:
     from importlib import reload
 
 # related to current projects
-try:
-    pass # from mydjangoapp.views import *
-    pass # from mydjangoapp.models import *
-except:
-    pass
+# try:
+#     from mydjangoapp.views import *
+#     from mydjangoapp.models import *
+# except:
+#     pass
 
 # map, filter
+if sys.version_info[0] < 3:
     lmap = map
     lfilter = filter
 else:
@@ -152,6 +153,30 @@ else:
         """ return list(filter(*a, **b)) """
         return list(filter(*a, **b))
 
+def mapwith(function):
+    """
+    >>> sum(map(int, '1 2 7 2'.split()))
+    12
+    >>> toints = mapwith(int)
+    >>> sum(toints('1 2 7 2'.split()))
+    12
+    >>> '1 2 7 2'.split() |mapwith(int) |postfix(sum)
+    12
+    """
+    return postfix(lambda *iterables: map(function, *iterables))
+    
+def filterwith(function):
+    return postfix(lambda *iterables: filter(function, *iterables))
+
+def lmapwith(function):
+    """ @see mapwith """
+    return postfix(lambda *iterables: lmap(function, *iterables))
+    
+def lfilterwith(function):
+    """ @see filterwith """
+    return postfix(lambda *iterables: lfilter(function, *iterables))
+
+makemap, makefilter, makelmap, makelfilter = mapwith, filterwith, lmapwith, lfilterwith
 # unicode stuff
 try:
     import uniutils
@@ -260,6 +285,32 @@ def print_matrix(M):
             row[i] += ' ' * (widths[i] - len(row[i]))
     print('\n'.join(' '.join(row) for row in M))
 
+# urllib
+def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
+    from urllib.parse import urlparse, parse_qs
+    
+    result = urlparse(url)._asdict()
+    
+    def single(a_dict):
+        for k,v in a_dict.items():
+            if not len(v) == 1:
+                raise ValueError("Doesn't have only one value {!r}: {}".format(k, v))
+        return {k:v[0] for k,v in a_dict.items()}
+
+    result['parsed_qs'] = parse_qs(result.pop('query'))
+    
+    if not multiple:
+        result['parsed_qs'] = single(result['parsed_qs'])
+
+    if fragment_is_qs:
+        result['fragment_qs'] = parse_qs(result.pop('fragment'))
+
+        if not multiple:
+            result['fragment_qs'] = single(result['fragment_qs'])
+
+    return dict(result)
+
+
 # functional tools
 try:
     from funcoperators import elipartial
@@ -275,8 +326,12 @@ except ImportError:
     pass
 
 @postfix
-def desc(x):
-    return {n:getattr(x, n) for n in dir(x) if not hasattr(getattr(x,n), '__call__')}
+def desc(x, *, underscore=False):
+    return {
+        n:getattr(x, n) for n in dir(x)
+        if not hasattr(getattr(x,n), '__call__')
+        if (not n.startswith('_') if not underscore else True)
+    }
 
 @infix
 def irange(*args):
@@ -303,3 +358,6 @@ else:
     exclusive = infix(range)
 
 inclusive = irange
+
+# custom aliases :
+ul = uniline
