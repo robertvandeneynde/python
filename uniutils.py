@@ -39,7 +39,9 @@ def uniname(s):
     >>> uniname('αβγ')
     ['GREEK SMALL LETTER ALPHA', 'GREEK SMALL LETTER BETA', 'GREEK SMALL LETTER GAMMA']
     """
-    return unicodedata.name(s, '?')
+    return (unicodedata.name(s, '?') if unicodedata.category(s) != 'Cc' else 
+            unicodedata.name(chr(0x2400 + ord(s))).replace('SYMBOL FOR', '<CONTROL>') if ord(s) < 32 or ord(s) == 127 else
+            '<CONTROL>')
     
 @multiple_makes_lmap
 def hexord(s):

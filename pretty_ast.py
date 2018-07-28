@@ -7,7 +7,7 @@ __author__ = 'Martin Blais <blais@furius.ca>'
 
 import sys
 import ast
-from ast import Node
+# from ast import Node
 import re
 
 __all__ = ('printAst',)
@@ -46,15 +46,13 @@ def rec_node(node, level, indent, write):
 
 
 def main():
-    import optparse
-    parser = optparse.OptionParser(__doc__.strip())
-    opts, args = parser.parse_args()
-
-    if not args:
-        parser.error("You need to specify the name of Python files to print out.")
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__.strip())
+    parser.add_argument('files', nargs='+')
+    args = parser.parse_args()
 
     import traceback
-    for fn in args:
+    for fn in args.files:
         print('\n\n%s:\n' % fn)
         try:
             printAst(compiler.parseFile(fn), initlevel=1)
@@ -62,7 +60,7 @@ def main():
             traceback.print_exc()
 
     
-def pretty2(string, *args, **kwargs):
+def pretty(string, *args, **kwargs):
     s = ast.dump(ast.parse(string), *args, **kwargs)
     i = 0
     # it = itertools.count(1)
@@ -75,8 +73,12 @@ def pretty2(string, *args, **kwargs):
             print(i * ' ', x.lstrip(',').lstrip())
 
 def main2(): 
-    with open(parser.filename) as f:
-        pretty2(f.read(), filename=parser.filename)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename')
+    args = parser.parse_args()
+    with open(args.filename) as f:
+        pretty(f.read(), filename=args.filename)
 
 if __name__ == '__main__':
-    main()
+    main2()

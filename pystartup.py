@@ -326,12 +326,41 @@ except ImportError:
     pass
 
 @postfix
-def desc(x, *, underscore=False):
+def desc(x, *, underscore=False, callable=False):
     return {
-        n:getattr(x, n) for n in dir(x)
-        if not hasattr(getattr(x,n), '__call__')
-        if (not n.startswith('_') if not underscore else True)
+        n: getattr(x, n)
+        for n in dir(x)
+        if (True if callable else hasattr(getattr(x,n), '__call__'))
+        if (True if underscore else not n.startswith('_'))
     }
+
+@postfix
+def dir_decorate(x, *, underscore=False, callable=True):
+    def reduction(name):
+        return 'function' if name == 'builtin_function_or_method' else name
+    
+    def decoration(obj):
+        """ returns '(' if obj is callable, '!' if it's a class, else '' """
+        return ('(' if hasattr(obj, '__call__') else
+                '!' if type(obj) is type(type) else ':' + reduction(obj.__class__.__name__))
+    
+    def keep1(n):
+        return True if callable else not hasattr(getattr(x,n), '__call__')
+    
+    def keep2(n):
+        return True if underscore else not n.startswith('_')
+    
+    def keep(n):
+        return keep1(n) and keep2(n)
+    
+    def filtered(x,n):
+        return ((True if callable else not hasattr(getattr(x,n), '__call__')
+            and (True if underscore else not n.startswith('_'))))
+    
+    return list(map(lambda t:t[1], sorted((decoration(getattr(x,n)), n + decoration(getattr(x, n))) for n in dir(x) if keep(n))))
+    # return [n + decoration(getattr(x, n)) for n in dir(x)]
+
+desc_dir = descdir = dirdecorate = dir_decorate
 
 @infix
 def irange(*args):

@@ -883,6 +883,10 @@ with_arguments = elicurry
 latercall = deferredcall = elicurry
 
 if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
-    unittest.main()
+    import sys
+    if sys.argv[1:] == []:
+        import doctest
+        doctest.testmod()
+        unittest.main()
+    elif sys.argv[1:] in (['-V'], ['--version']):
+        print('funcoperators version', __version__)

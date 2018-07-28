@@ -1,0 +1,21 @@
+cd /home/robert/python/funcoperators
+
+echo 'please increment the version number in file, vim will be launched'
+read 
+vim ~/python/funcoperators.py
+
+# chmod +w funcoperators/__init__.py
+# cp ~/python/funcoperators.py funcoperators/__init__.py
+# chmod -w funcoperators/__init__.py
+
+# chmod +w funcoperators/README.md
+# cp README.md funcoperators/README.md
+# chmod -w funcoperators/README.md
+
+source create/bin/activate
+python setup.py sdist
+
+echo
+echo "Do not launch in virtual env 'python setup.py sdist upload'"
+echo "Launch in virtual env 'activatevenv; twine upload dist/funcoperators-x.y.tar.gz'"
+echo "Then I suggest to 'cd ~/python; git commit funcoperators x.y' for the new version"
