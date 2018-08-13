@@ -35,3 +35,7 @@ class OutFile:
         self.f.__exit__(type, value, traceback)
         if self.print_created:
             print('Created ' + self.filename)
+
+class OutFilePrint(OutFile):
+    def __init__(self, filename, supargs=''):
+        OutFile.__init__(self, filename, supargs, print_created=True)

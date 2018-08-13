@@ -93,6 +93,21 @@ def mapwith(function):
 
 s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
 
+## unary, prefix, postfix
+import math
+fac = prefix(math.factorial)
+x = fac(5)
+x = 5-fac
+x = 5|fac
+fac = postfix(math.factorial)
+x = fac(5)
+x = fac-5
+x = fac|5
+fac = unary(math.factorial)
+x = fac(5)
+x = fac-5
+x = 5-fac
+
 ## power
 h = unary(hex)
 o = unary(ord)
@@ -123,7 +138,12 @@ def f(x,y,z):
 r = f(1,2,3)
 r = f[1](2,3)
 r = f[1][2][3]()
-# This doesn't work: f[1,2] becaues it gives only one argument: a tuple
+# Notice that "f[1,2]" doesn't work because it gives only one argument: a tuple (@see partiallymulti)
+
+g = f[1]  # gives positional arguments
+g = f.val(1)  # gives positional arguments
+g = f.key(z=3)  # gives keyword arguments
+g = f.partial(1, z=3)  # gives positional and keyword arguments
 
 # partiallyauto works only for methods with N fixed positional args
 
@@ -162,7 +182,7 @@ square = elipartial(pow, ..., 2)  # = pow(something, 2)
 y = square(5)  # 5 ** 2
 
 # elicurry (alias with_arguments or deferredcall)
-show = print | elicurry(1, ..., 3, sep='/')  # 'show' is 'print' with arguments '1, something, 3' and keyword argument 'sep="."'
+show = print |elicurry(1, ..., 3, sep='/')  # 'show' is 'print' with arguments '1, something, 3' and keyword argument 'sep="."'
 show(2)  # prints 1/2/3
 
 # see more examples in the test cases in source code
@@ -172,7 +192,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.9.3'
+__version__ = '0.9.4'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -188,7 +208,7 @@ try:
 except ImportError:
     _NO_NUMPY = True
     
-class BasicTests(unittest.TestCase):
+class _BasicTests(unittest.TestCase):
     def test_fundamentals(self):
         # as decorator
         @infix
@@ -487,6 +507,9 @@ class base:
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
 
+    def __repr__(self):
+        return repr(self.function)
+
 
 class infix(base):
     """
@@ -551,7 +574,7 @@ def opmethod(method):
     10
     >>> 1 | a.f  # use prefixmethod instead of opmethod if you only want this behavior
     10
-    >>> # This doesn't work: a |f| 1 because it calls function f (@see infixmethod)
+    >>> # Notice that "a |f| 1" doesn't work because it calls function f (@see infixmethod)
     """
     return _opmethod_base(method, unary)
 
@@ -633,8 +656,7 @@ class partially(base):
     5
     >>> f[1][2][3]()
     5
-    >>> # This doesn't work: f[1,2] because this gives which is give one argument: a tuple (@see partiallymulti)
-    
+    >>> # Notice that "f[1,2]" doesn't work because it gives only one argument: a tuple (@see partiallymulti)
     >>> # If you don't like "[]", there is also a syntax with methods
     >>> g = f.val(1)  # provide the value 1
     >>> g(2,3)
@@ -648,10 +670,11 @@ class partially(base):
     >>> g = f.key(y=2)  # provide key argument y=2
     >>> g(x=1, z=3)
     5
-    >>> g = f.part(1, z=3)  # provide positional arguments 1, and keyword argument z=2
+    >>> g = f.partial(1, z=3)  # provide positional arguments 1, and keyword argument z=3
     >>> g(2)
     5
-    >>> g = f.val(1).key(z=3)  # provide positional arguments 1, and keyword argument z=2
+    >>> # f.partial(1) also aliases f.part(1), f.given(1), f.assuming(1), f.where(1)
+    >>> g = f.val(1).key(z=3)  # provide positional arguments 1, and keyword argument z=3
     >>> g(2)
     5
     >>> myprint = partially(print).key(sep="/")
@@ -664,12 +687,14 @@ class partially(base):
     """
     def key(self, **kwargs):
         return partially(_partial(self, **kwargs))
-    
+
     def val(self, *vals):
         return partially(_partial(self, *vals))
-    
-    def part(self, *args, **kwargs):
+
+    def partial(self, *args, **kwargs):
         return partially(_partial(self, *args, **kwargs))
+
+    part = assuming = given = where = partial
     
     def __getitem__(self, item):
         return partially(_partial(self.function, item))
@@ -825,6 +850,15 @@ class bracket(base):
     >>> g = f[1, ..., 3]
     >>> g(2)
     5
+    >>> g = f.partial(1, ..., 3)
+    >>> g(2)
+    5
+    >>> g = f.partial(1, ..., z=3)
+    >>> g(2)
+    5
+    >>> g = f.partial(1, z=3)
+    >>> g(2)
+    5
     """
     def key(self, **kwargs):
         return partially(elipartial(self, **kwargs))
@@ -832,8 +866,10 @@ class bracket(base):
     def val(self, *vals):
         return partially(elipartial(self, *vals))
     
-    def part(self, *args, **kwargs):
+    def partial(self, *args, **kwargs):
         return partially(elipartial(self, *args, **kwargs))
+    
+    part = assuming = given = where = partial
     
     def __getitem__(self, item):
         if isinstance(item, tuple):
@@ -851,13 +887,21 @@ def elicurryargs(function, args):
     """
     return elipartial(function, *args)
 
+def simplecurry(*args, **kwargs):
+    r"""
+    >>> from __future__ import print_function
+    >>> show = print |simplecurry(1, 2, sep='/')  # show is print with arguments 1, 2 and keyword argument sep='.'
+    >>> show(3)
+    1/2/3
+    """
+    return postfix(lambda function: _partial(function, *args, **kwargs))
+
 def elicurry(*args, **kwargs):
     r"""
     >>> from __future__ import print_function
-    >>> show = print | with_arguments(1, ..., 3, sep='/')  # show is print with arguments 1, something, 3 and keyword argument sep='.'
-    >>> show(2)
-    1/2/3
-    >>> show = print | deferredcall(1, ..., 3, sep='/')  # show is print with missing arguments, currently here is 1, something later, 3 and keyword argument sep='.'
+    >>> show = print |elicurry(1, ..., 3, sep='/')        # show is print with arguments 1, something, 3 and keyword argument sep='.'
+    >>> show = print |with_arguments(1, ..., 3, sep='/')  # alias 
+    >>> show = print |deferredcall(1, ..., 3, sep='/')    # alias
     >>> show(2)
     1/2/3
     >>> show(2, 4)
@@ -884,7 +928,7 @@ latercall = deferredcall = elicurry
 
 if __name__ == '__main__':
     import sys
-    if sys.argv[1:] == []:
+    if sys.argv[1:] in ([], ['-v']):
         import doctest
         doctest.testmod()
         unittest.main()

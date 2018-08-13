@@ -173,7 +173,12 @@ The library adds sugar to functools, called `curry`, the names comes from other 
     r = g(2,3)
     r = f[1](2,3)
     r = f[1][2][3]()
-    # This does not work: f[1,2] because it gives one argument: a tuple (@see partiallymulti)
+    # Notice that "f[1,2]" doesn't work because it gives only one argument: a tuple (@see partiallymulti)
+    
+    g = f[1]  # gives positional arguments
+    g = f.val(1)  # gives positional arguments
+    g = f.key(z=3)  # gives keyword arguments
+    g = f.partial(1, z=3)  # gives positional and keyword arguments
     
     @partiallymulti
     def f(x,y,z):
@@ -212,6 +217,8 @@ The library also proposes to use Python's `...` (`Ellipsis`) as a natural placeh
     y = tenexp(2)  # 10 ** 2
     square = elipartial(pow, ..., 2)  # = pow(something, 2)
     y = square(5)  # 5 ** 2
+    square = pow |elicurry(..., 2)  # = pow(something, 2)
+    y = square(5)  # 5 ** 2
 
 If you like the `partially` and `partiallymulti` syntax, there is `bracket`:
 
@@ -222,10 +229,12 @@ If you like the `partially` and `partiallymulti` syntax, there is `bracket`:
     r = f(1,2,3)
     g = f[1, ..., 3]  # g = a function with one argument: y
     r = g(2)
+    g = f.partial(1, ..., 3)  # as a method
+    g = f.partial(1, z=3)     # allowing keyword arguments
     
-Here as a more complex example, we define `show` to be the `print` function with arguments `1`, _something_, `3` and keyword argument `sep='.'`.
+Here as a more complex example using `elicurry`, we define `show` to be the `print` function with arguments `1`, _something_, `3` and keyword argument `sep='.'`.
 
-    show = print | elicurry(1, ..., 3, sep='/')
+    show = print |elicurry(1, ..., 3, sep='/')
     show(2)  # prints 1/2/3
     
 # see more examples in the test cases in [source code](https://github.com/robertvandeneynde/python/blob/master/funcoperators.py)

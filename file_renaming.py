@@ -1,5 +1,4 @@
 #! /usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 import re
 import os
@@ -8,6 +7,24 @@ import unicodedata
 from pprint import pprint
 import sys
 assert sys.version_info >= (3,)
+
+class Renamer:
+    """ call renamer.rename instead of os.rename to have a safe guard.
+    renamer ask confirmation for the first 5 files """
+    def __init__(self, *, maxtry=5):
+        self.trycount = 0
+        self.renamed = 0
+        self.maxtry = maxtry
+    def rename(self, a, b):
+        import os
+        if a == b:
+            return
+        if self.trycount >= self.maxtry or input('Rename {!r} -> {!r}? [Y/n]'.format(a,b)).lower() not in ('n', 'no', 'non'):
+            os.rename(a, b)
+            self.renamed += 1
+        else:
+            self.trycount += 1
+
 
 def pourcentEncoded(string,encoding='utf-8'):
     '''
@@ -247,17 +264,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Rename files or directories')
 
     parser.add_argument(
-            'targets',
-            nargs='*',
-            default=['.'],
-            help='Files or dirs to rename'
+        'targets',
+        nargs='*',
+        default=['.'],
+        help='Files or dirs to rename'
     )
     
     parser.add_argument(
-            '--functions',
-            nargs='+',
-            choices=func_names,
-            help=''
+        '--functions',
+        nargs='+',
+        choices=func_names,
+        help=''
     )
     
     parser.add_argument('--force', action='store_true', help='')

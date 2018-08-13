@@ -176,11 +176,24 @@ def lfilterwith(function):
     """ @see filterwith """
     return postfix(lambda *iterables: lfilter(function, *iterables))
 
+def whichall(iterable_of_x_condition):
+    """
+    >>> all(x % 2 == 0 for x in range(10))
+    False
+    >>> # annoying, I want to know which ones !
+    >>> whichall((x, x % 2 == 0) for x in range(10))
+    [0, 2, 4, 6, 8]
+    >>> # the standard solution is annoying because it has to MOVE the condition to the end
+    >>> [x for x in range(10) if x % 2 == 0]
+    [0, 2, 4, 6, 8]
+    """
+    return [x for x,condition in iterable_of_x_condition if condition]
+
 makemap, makefilter, makelmap, makelfilter = mapwith, filterwith, lmapwith, lfilterwith
 # unicode stuff
 try:
     import uniutils
-    from uniutils import * # uniname, hexord, uord, uordname, uniline, unicontext, unilinecat, unibasecat
+    from uniutils import *  # uniname, hexord, uord, uordname, uniline, unicontext, unilinecat, unibasecat
 except:
     pass
 
@@ -318,7 +331,7 @@ except ImportError:
     pass
 
 try:
-    from funcoperators import compose, circle # (hex |circle| ord)(x) == hex(ord(x))
+    from funcoperators import compose, circle  # (hex |circle| ord)(x) == hex(ord(x))
     
     # french
     rond = circle
@@ -327,12 +340,14 @@ except ImportError:
 
 @postfix
 def desc(x, *, underscore=False, callable=False):
-    return {
-        n: getattr(x, n)
-        for n in dir(x)
-        if (True if callable else hasattr(getattr(x,n), '__call__'))
-        if (True if underscore else not n.startswith('_'))
-    }
+    
+    def keep1(n):
+        return True if callable else not hasattr(getattr(x,n), '__call__')
+    
+    def keep2(n):
+        return True if underscore else not n.startswith('_')
+    
+    return {n: getattr(x, n) for n in dir(x) if keep1(n) and keep2(n)}
 
 @postfix
 def dir_decorate(x, *, underscore=False, callable=True):
@@ -341,8 +356,9 @@ def dir_decorate(x, *, underscore=False, callable=True):
     
     def decoration(obj):
         """ returns '(' if obj is callable, '!' if it's a class, else '' """
-        return ('(' if hasattr(obj, '__call__') else
-                '!' if type(obj) is type(type) else ':' + reduction(obj.__class__.__name__))
+        return ('!' if type(obj) is type else 
+                '(' if hasattr(obj, '__call__') else
+                ':' + reduction(obj.__class__.__name__))
     
     def keep1(n):
         return True if callable else not hasattr(getattr(x,n), '__call__')
