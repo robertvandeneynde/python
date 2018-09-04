@@ -303,16 +303,15 @@ def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
     from urllib.parse import urlparse, parse_qs
     
     result = urlparse(url)._asdict()
-    
-    def single(a_dict):
-        for k,v in a_dict.items():
-            if not len(v) == 1:
-                raise ValueError("Doesn't have only one value {!r}: {}".format(k, v))
-        return {k:v[0] for k,v in a_dict.items()}
 
     result['parsed_qs'] = parse_qs(result.pop('query'))
     
     if not multiple:
+        def single(a_dict):
+            for k,v in a_dict.items():
+                if not len(v) == 1:
+                    raise ValueError("Doesn't have only one value {!r}: {}".format(k, v))
+            return {k:v[0] for k,v in a_dict.items()}
         result['parsed_qs'] = single(result['parsed_qs'])
 
     if fragment_is_qs:
@@ -376,7 +375,7 @@ def dir_decorate(x, *, underscore=False, callable=True):
     return list(map(lambda t:t[1], sorted((decoration(getattr(x,n)), n + decoration(getattr(x, n))) for n in dir(x) if keep(n))))
     # return [n + decoration(getattr(x, n)) for n in dir(x)]
 
-desc_dir = descdir = dirdecorate = dir_decorate
+desc_dir = descdir = dirdec = dirdecorate = durdesc = dir_decorate
 
 @infix
 def irange(*args):
@@ -403,6 +402,19 @@ else:
     exclusive = infix(range)
 
 inclusive = irange
+
+# utils
+def groupdict(iterable):
+    """
+    >>> groupdict((i%2, i) for i in range(10))
+    {0: [0,2,4,6,8], 1: [1,3,5,7,9]}
+    """
+    d = {}
+    for x,y in iterable:
+        if x not in d:
+            d[x] = []
+        d[x].append(y)
+    return d
 
 # custom aliases :
 ul = uniline

@@ -9,6 +9,9 @@ class OutFile:
     """
     with OutFile("compiled.txt") as f: f.write('stuff')
     # compiled.txt is read only, you can repeat this process
+    
+    print_created can be set to True to print the name of the file create 
+    or be set to 'green' to print the filename in color.
     """
     def __init__(self, filename, supargs='', *, print_created=False):
         self.filename = filename
@@ -33,9 +36,13 @@ class OutFile:
     def __exit__(self, type, value, traceback):
         self.lock()
         self.f.__exit__(type, value, traceback)
-        if self.print_created:
-            print('Created ' + self.filename)
+        if self.print_created == True:
+            print("Created '" + self.filename + "'")
+        elif self.print_created == 'green':
+            print('\033[32m' + "Created '" + self.filename + "'" + '\033[0m')
 
-class OutFilePrint(OutFile):
-    def __init__(self, filename, supargs=''):
-        OutFile.__init__(self, filename, supargs, print_created=True)
+def OutFilePrint(filename, supargs=''):
+    return OutFile(filename, supargs, print_created=True)
+
+def OutFileGreen(filename, supargs=''):
+    return OutFile(filename, supargs, print_created='green')
