@@ -8,15 +8,19 @@ from datetime import datetime, date, time, timedelta
 from itertools import filterfalse
 from collections import defaultdict
 
-IN_FILE = 'all-exo.txt'
-GEHOL_FILE = 'all-3-sections-gehol.ics' # gehol-q2.ics'
-ASSISTANTS = 'watchi decrol mahrou tillema gernier dierick arnhem jvc vanden friob'.split()
+IN_FILE = 'cfs-v1.txt'
+GEHOL_FILE = 'calendar(18).ics'  # gehol-q2.ics'
+ASSISTANTS = '''
+    watchi decrol mahrou tillema gernier
+    dierick arnhem jvc vanden friob vanwelde
+    chimie casier imatouchan jvc
+'''.split()
 PREFIX_PER_ASSISTANT = {}
 DEFAULT_PREFIX = "TP"
 ALL_DURATION = '2h'
-SEANCES = 'num' # empty meaning not present, 'num' meaning numbers, 'letters' meaning letters, 'mixed' meaning numbers and text
-GROUPS_PREFIXES = ('IrBi', 'IrCi', 'InGe', 'IrAr') # groups begin with a prefix, then possibly a number
-ALL_ASSISTANTS = 'all-assistants.ics' # if not empty, name of ics file where all the assistants are merged
+SEANCES = 'num'  # empty meaning not present, 'num' meaning numbers, 'letters' meaning letters, 'mixed' meaning numbers and text
+GROUPS_PREFIXES = ('IrBi', 'IrCi', 'InGe', 'IrAr')  # groups begin with a prefix, then possibly a number
+ALL_ASSISTANTS = 'all-assistants-2.ics'  # if not empty, name of ics file where all the assistants are merged
 
 if ALL_ASSISTANTS:
     if ALL_ASSISTANTS.endswith('.ics'):
@@ -76,16 +80,30 @@ def naive_to_utc(naive):
 
 def printret(x): print(x); return x
 
+class Memorizer:
+    def __init__(self):
+        self.cache = {}
+        
+    def ask(self, name):
+        if name in self.cache:
+            return self.cache[name]
+        self.cache[name] = input(str(('Is assistant ?', name, '[Y/n]'))) not in ('n', )
+        return self.cache[name]
+
+memorizer = Memorizer()
+
 def convert(bit):
     M = [(r, r.fullmatch(bit)) for r in RE_LIST]
     F = [(r,m) for r,m in M if m]
+    if len(F) == 0 and memorizer.ask(bit):
+        return ('assistant', bit)
     assert len(F) == 1, f"in {bit}: exactly one must match, but {len(F)} matched"
     return F[0]
 
 text_bits_per_assistant = defaultdict(list)
 
 with open(IN_FILE) as f:
-    lines = [l.strip('\n') for l in f]
+    lines = [l.strip('\n').strip() for l in f]
 
 for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
     
@@ -114,8 +132,12 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
             seances.append(int(m.group(1)))
         elif r is ASSISTANT:
             assistants.append(m.group(0).lower())
+        elif r == 'assistant':
+            assistants.append(m.lower())
         elif r is WEEK_SHIFT:
             delta = timedelta(weeks=int(m.group(1)))
+        else:
+            raise AssertionError
     
     if not ASSISTANTS:
         assert not assistants
@@ -156,7 +178,7 @@ for line in filterfalse(Re('\s*#').match, filter(bool, lines)):
         else:
             summary = f'{prefix} S{seance}'
         
-        if search_for_ics_gehol:
+        if search_for_ics_gehol and GEHOL_FILE:
             Devent = {
                 'DTSTART': f'{beg:%Y%m%dT%H%M%S}Z',
                 'DTEND': f'{end:%Y%m%dT%H%M%S}Z',

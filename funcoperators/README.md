@@ -11,7 +11,7 @@ This example shows how infix operators can be created,
 the library also introduces bash like _pipes_ and
 shortcuts to create partial functions or function
 composition inspired by functional languages.
-    
+
 # Using infix
 
 Infix operators can be created using the `infix` class.
@@ -62,8 +62,8 @@ dot = infix(numpy.dot)
 
 a = (1,2,3) /dot/ (4,5,6)
 a = (1,2,3) |dot| (4,5,6)  # same 
-r = 2 + (1,2,3) /dot/ (4,5,6)  # here "/" has priority over + like in normal python
-r = 2 + (1,2,3) *dot* (4,5,6)  # for a dot PRODUCT, '*' seems logical
+r = 2 + (1,2,3) /dot/ (4,5,6)  # here "/" has priority over "+" like in normal python
+r = 2 + (1,2,3) *dot* (4,5,6)  # for a dot PRODUCT, "*" seems logical
 r = 2 + dot((1,2,3), (4,5,6))  # still works as a function
 
 cross = infix(numpy.cross)
@@ -160,9 +160,19 @@ def filter_out(x):
 L = [1,2,7,0,2,0] | filter_out(0)  # L == [2,3,8,3]
 
 def mapwith(function):
-    return postfix(lambda *its: map(function, *its))
+    return postfix(lambda *iterables: map(function, *iterables))
 
 s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
+```
+
+# Useful for format 
+
+```python
+>>> 42 | format /curryright/ 'x'
+'2a'
+>>> formatwith = lambda fmt: postfix(lambda value: format(value, fmt))
+>>> 52 |formatwith('x')
+'2a'
 ```
 
 # Function composition (compose, alias circle)
@@ -181,7 +191,7 @@ display = hex *circle* ord
 
 # More partial syntax
 
-The library adds sugar to functools.partial, using functions called `curry` (and variants like curryright, simplecurry) and `partially`. The name `curry` comes from other languages.
+The library adds sugar to functools.partial, using functions called `curry` (and variants like `curryright`, `simplecurry`) and `partially`. The name `curry` comes from other languages.
 
 ```python
 def f(x,y,z):
@@ -192,7 +202,12 @@ g = f /curry/ 5
 y = f(2,1)  # y = 8
 
 from funcoperators import curryright
+square = pow /curryright/ 2  # square(x) = x ** 2
 square = curryright(pow, 2)  # square(x) = x ** 2
+
+from funcoperators import provide_right  # alias provide_right = curryright
+square = provide_right(pow, 2)  # square(x) = x ** 2
+square = pow /provide_right/ 2  # square(x) = x ** 2
 
 from funcoperators import simplecurry
 g = f |simplecurry(1, z=3)
@@ -218,6 +233,11 @@ g = f[1]  # gives positional arguments
 g = f.val(1)  # gives positional arguments
 g = f.key(z=3)  # gives keyword arguments
 g = f.partial(1, z=3)  # gives positional and keyword arguments
+
+# alias part = assuming = given = where = partial
+g = f.part(1, z=3)
+g = f.where(1, z=3)
+g = f.given(1, z=3)
 ```
 
 `partiallymulti` allows `f[arg1, arg2]`.
@@ -286,13 +306,22 @@ g = f.partial(1, ..., 3)  # as a method
 g = f.partial(1, z=3)     # allowing keyword arguments
 ```
 
-Here is a more complex example using `elicurry`, we define `show` to be the `print` function with arguments `1`, _something_, `3` and keyword argument `sep='.'`.
+Here is a more complex example using `elicurry`, we define `show` to be the `print` function with arguments `1`, _something_, `3` and keyword argument `sep='/'`.
 
 ```python
 show = print |elicurry(1, ..., 3, sep='/')
 show(2)  # prints 1/2/3
 ```
+
+Let's note that `elicurry` has many aliases:
+
+```python
+show = print |elicurry(1, ..., 3, sep='/')
+show = print |with_arguments(1, ..., 3, sep='/')
+show = print |deferredcall(1, ..., 3, sep='/')
+show = print |latercall(1, ..., 3, sep='/')
+```
     
 # More examples
 
-See more examples in the test cases in [source code](https://github.com/robertvandeneynde/python/blob/master/funcoperators.py)
+See more examples in the test cases in [source code](https://github.com/robertvandeneynde/python/blob/master/funcoperators.py).

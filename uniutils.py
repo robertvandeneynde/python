@@ -181,13 +181,13 @@ def unilineverbose(s):
     return '{} ({})'.format(uniline(s), unicatverbose(s))
 
 @multiple_makes_lmap
-def unicontext(s, width=5):
+def unicontext(s, height=5):
     name = unicodedata.name(s, '?')
     print('U+' + hex(ord(s))[2:].zfill(4).upper(), s, name)
     b = ord(s) >> 4 << 4
     print('       ' + ' '.join('v' if i == ord(s) % 16 else ' ' for i in range(16)))
     print('       ' + ' '.join(hex(i)[2:].upper() for i in range(16)))
-    for n in (b + i * 16 for i in range(-width,+width+1)):
+    for n in (b + i * 16 for i in range(-height,+height+1)):
         if n < 0x10: # contains \n and \t annoying to print
             if n >= 0:
                 print(('U+' if n != b else '>>') + '0000' + 32 * ' ')

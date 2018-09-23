@@ -27,8 +27,10 @@ SRC_FORMAT = 'generateurAMC_{serie}/scans/{filename}'
 
 def compute_mark_list_q2(note, points_distrib:(3,1,2,2,1,1)):
     """
-    if node == 'fx-vxx' yields 2,0,1,2,0,0
-    if node == 'fx-v' yields 2,0,1,2,0,0
+    if note == 'fx-vxx' yields 2,0,1,2,0,0
+    if note == 'fx-v' yields 2,0,1,2,0,0
+    if note == '123456' raises ValueError
+    if note == 'vvvvvvv' raises ValueError
     """
     points = (3,1,2,2,1,1)
     assert sum(points_distrib) == 10

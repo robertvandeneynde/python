@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 import argparse
 p = argparse.ArgumentParser()
-p.add_argument('files', nargs='+')
+p.add_argument('files', nargs='*', help='files to rename, default to all files in current dir')
+# p.add_argument('-f', '-y', '--force', action='store_true', help='do not prompt, say yes to all questions')
+g = p.add_mutually_exclusive_group()
+g.add_argument('--iso', action="store_true", help='use yyyy-mm-dd date format')
+g.add_argument('--iso-minutes', '--iso-time', action="store_true", help='use yyyy-mm-dd_HH-MM date format')
+g.add_argument('--iso-seconds', action="store_true", help='use yyyy-mm-dd_HH-MM-SS date format')
 args = p.parse_args()
 
 import os
-assert all(map(os.path.isfile, args.files))
+args.file = args.files or list(filter(os.path.exists, os.listdir()))
+assert all(map(os.path.exists, args.files))  # all(map(os.path.isfile OR os.path.directory, args.files))
+
+date_format = ('%Y-%m-%d' if args.iso else
+               '%Y-%m-%d_%H-%M' if args.iso_minutes else
+               '%Y-%m-%d_%H-%M-%S' if args.iso_seconds else 
+               '%a-%d-%b-%Y_%H:%M_%S')
+
+datetime_format = ('%Y-%m-%d_%H-%M-%S' if args.iso else 
+                   '%Y-%m-%d_%H-%M' if args.iso_minutes else 
+                   '%Y-%m-%d_%H-%M-%S' if args.iso_seconds else 
+                   '%a-%d-%b-%Y')
 
 try:
     from file_renaming import Renamer
@@ -23,15 +39,16 @@ except ImportError:
                 self.trycount += 1
 
 from datetime import datetime, timedelta
+from itertools import chain
 
 N = datetime.now()
-def f(n):
-    return (N + timedelta(days=n)).strftime('%a-%d-%b-%Y').lower()
-def g():
-    return N.strftime('%a-%d-%b-%Y_%H:%M_%S').lower()
+f = lambda n: (N + timedelta(days=n)).strftime(date_format).lower()
+g = lambda: N.strftime(datetime_format).lower()
 
 renamer = Renamer()
-for old in args.files:
+for old in chain(
+        filter(os.path.isfile, args.file),
+        filter(os.path.isdir, args.file)):  # dir after for weird file nesting like rename_today today/ today/today.txt
     new = (old.replace('now', g())
               .replace('today', f(0))
               .replace('yesterday', f(-1))

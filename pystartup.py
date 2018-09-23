@@ -56,6 +56,12 @@ from pprint import pprint
 from fractions import Fraction
 frac = F = Fraction # from fractions import Fraction as F
 
+# funcoperators
+try:
+    from funcoperators import infix, postfix, unary
+except ImportError:
+    infix = postfix = unary = lambda x:x
+
 # datetime
 from datetime import date, time, datetime, timedelta
 
@@ -64,15 +70,10 @@ class CallableTimedelta(timedelta):
         return self * x
     
 seconds, milliseconds, microseconds, days, hours, minutes, weeks = (CallableTimedelta(**{x:1}) for x in ('seconds', 'milliseconds', 'microseconds', 'days', 'hours', 'minutes', 'weeks'))
-combine = datetime.combine
+years = 365.25 * days  # Julian year https://en.wikipedia.org/wiki/Julian_year_(astronomy)
+combine = infix(datetime.combine)
 now = datetime.now
 today = datetime.today
-
-# funcoperators
-try:
-    from funcoperators import infix, postfix, unary
-except ImportError:
-    infix = postfix = unary = lambda x:x
 
 # datetime utils
 @postfix
@@ -415,6 +416,13 @@ def groupdict(iterable):
             d[x] = []
         d[x].append(y)
     return d
+
+def setdiff(A, B):
+    if not isinstance(A, (set, frozenset)):
+        A = set(A)
+    if not isinstance(B, (set, frozenset)):
+        B = set(B)
+    return (A - B, B - A)
 
 # custom aliases :
 ul = uniline

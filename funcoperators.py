@@ -192,7 +192,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.9.6'
+__version__ = '0.9.6'  # TODO: update major release from 9 to 10 (introduced non backward compatible change)
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -249,6 +249,11 @@ class _BasicTests(unittest.TestCase):
         vec_eq = infix(lambda A,B: all(A == B))
         self.assertTrue((5,7,9) |vec_eq| array((1,2,3)) + array((4,5,6)))
         self.assertTrue((0,0,-2) |vec_eq| (1,2,0) *cross* (3,4,0))  # beware precedence
+
+        with self.assertRaises(Exception):
+            # numpy.array has a "|" operator!
+            array((1,2,3)) + 5 |postfix(tuple)  # the left operand is called
+        prefix(tuple)| array((1,2,3)) + 5  # the left operand is called
 
     def test_unary(self):
         to_s = postfix(str)
@@ -377,7 +382,7 @@ class _BasicTests(unittest.TestCase):
     
     def test_not_enough(self):
         show = print | deferredcall(1, ..., 3, sep='/')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             show()
     
     def test_eli(self):
@@ -804,12 +809,10 @@ def elipartial(function, *args, **kwargs):
     >>> show()
     Traceback (most recent call last):
         ...
-    ValueError: Ellipsis still in elipartial call.
+    TypeError: Ellipsis still in elipartial call.
     >>> show(2)
     1/2/3
     """
-    
-    # can't functools.wrap this function, I don't know why.
     
     def newfunc(*fargs, **fwargs):
         itfargs = iter(fargs)
@@ -818,7 +821,7 @@ def elipartial(function, *args, **kwargs):
             try:
                 return next(itfargs)
             except StopIteration:
-                raise ValueError('Ellipsis still in elipartial call.')
+                raise TypeError('Not enough arguments, Ellipsis still in elipartial call.')
         
         # beware, generators can't raise StopIteration, so, don't do "newargsbase = tuple(arg if arg is not Ellipsis else next(itfargs) for arg in args)"
         
@@ -831,6 +834,14 @@ def elipartial(function, *args, **kwargs):
         newkeywords.update(fwargs)
         
         return function(*newargs, **newkeywords)
+    
+    # @functools.wraps(function) is not exactly what we want
+    # so we manually call update_wrapper job
+    WRAPPER_ASSIGNMENTS = ('__module__', '__qualname__' '__name__', '__doc__', '__annotations__') # no and 
+    WRAPPER_UPDATES = ('__dict__',)
+    functools.update_wrapper(newfunc, function, assigned = WRAPPER_ASSIGNMENTS, updated = WRAPPER_UPDATES)
+    
+    # TODO: update __annotations__ and/or __doc__ to show "x bounded to 5"
     
     return newfunc
 
@@ -911,7 +922,7 @@ def elicurry(*args, **kwargs):
     >>> show()
     Traceback (most recent call last):
         ...
-    ValueError: Ellipsis still in elipartial call.
+    TypeError: Ellipsis still in elipartial call.
     >>> show = print |with_arguments(1,2, sep='/') |with_arguments(end=';\n')
     >>> show(3)
     1/2/3;

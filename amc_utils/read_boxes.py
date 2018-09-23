@@ -10,6 +10,13 @@ from decimal import Decimal
 
 from pprint import pprint
 
+try:
+    from generate_utils import OutFileGreen as OutFile
+except ImportError:
+    def OutFile(name):
+        info('Creating', name)
+        return open(name, 'w')
+
 ZONE_BOX = 4
 
 def irange(*args):
@@ -444,7 +451,7 @@ class ReadFromMatriculeMarkCsv(OpenQuestionSource):
                     k = int(d['MATRICULE'])
                     v = Decimal(d[self.column_name]) 
                     if k in D:
-                        raise ValueError(f'Doublons in with at least {k}')
+                        raise ValueError(f'Doublon found in {filename}: {k}')
                     D[k] = v
                     
         self.isread = True
@@ -569,7 +576,7 @@ class StandardNames:
     QMAT = Re('^zmatr[\d+]$')
     QMAT_FORMAT = 'zmatr[{}]'.format
 
-def DoAssociationAuto(SERIES=('A', 'B'), PROJECT_NAME:'string that may contain {serie} tag'='generateurAMC_{serie}'):
+def DoAssociationAuto(*, series=('A', 'B'), PROJECT_NAME:'string that may contain {serie} tag'='generateurAMC_{serie}'):
     assert len(set(map(str.lower, SERIES))) == len(SERIES), "no duplicates in series !"
 
     to_commit = []
@@ -644,6 +651,10 @@ def GenerateAnswers(*, SERIES=('A', 'B'), PROJECT_NAME:'string that may contain 
         Dict[AmcQuestionId, 'to', LatexQuestionName] = dict_int_key(
             dbs['layout'].execute('''select question, name from layout_question'''))
         
+        for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association'):
+            if (auto or manual) is None:
+                raise Exception(f"Student {student} doesn't have a matricule, run DoAssociationAuto and/or set manually the matricule")
+            
         A = Dict[AmcStudentId, 'to', Matricule] = {
             int(student): int(auto or manual)
             for student, auto, manual in dbs['association'].execute('select student, auto, manual from association_association')
@@ -735,6 +746,16 @@ def dict_union(*dicts):
 
 class UnknownOpenQuestionSource(Exception):
     pass
+
+def GenerateSrcList(output:'.csv', *, project:'generateurAMC_A', page=None):
+    c = sqlite3.connect(project + '/data/capture')
+    
+    L = src.replace('%PROJET', 'project') for src in c.execute(
+        ''' select src from capture_page ''' if page is None else
+        ''' select src from capture_page where page={}'''.format(int(page)))
+    
+    with OutFile(output) as out:
+        out.write('\n'.join(L))
 
 class ExamInfo:
     SERIES:('A', 'B')
@@ -916,7 +937,167 @@ class PHYSS1001_JUINRATTR_2017_2018(ExamInfo):
             StandardPossibleAnswer('2.83e-7', '2.73e-7', '2.93e-7', 0),
         ],
     }
+
+class PHYSS1001_AOUT_2017_2018(ExamInfo):
+    SERIES = ('A', 'B')
+    PROJECT_NAME = 'generateurAMC_{serie}'
+
+    ANSWERS_ = {  # list of [value, min, max, -points minus]
+
+        'QF7a': [
+
+            StandardPossibleAnswer('1.01e3', '0.91e3', '1.11e3', 0),
+
+            StandardPossibleAnswer('6.74e3', '6.64e3', '6.84e3', -2)
+
+        ],
+
+        'QF8a': [
+
+            StandardPossibleAnswer('9.42e-5', '9.32e-5', '9.52e-5', 0),
+
+        ],
+
+        'QF9a': [
+
+            StandardPossibleAnswer('1.42e-8', '1.32e-8', '1.52e-8', 0),
+
+        ],
+
+        'QF10a': [
+
+            StandardPossibleAnswer('3.54e0', '3.44e0', '3.64e0', 0),
+
+        ],
+
+        'QF11a': [
+
+            StandardPossibleAnswer('1.54e4', '1.44e4', '1.64e4', 0),
+
+            StandardPossibleAnswer('8.88e3', '8.78e3', '8.98e3', -2),
+
+        ],
+
+        'QF12a': [
+
+            StandardPossibleAnswer('2.99e-9', '2.89e-9', '3.09e-9', 0),
+
+        ],
+
+        'QF7b': [
+
+            StandardPossibleAnswer('7.79e2', '7.69e2', '7.89e2', 0),
+
+            StandardPossibleAnswer('5.80e3', '5.70e3', '5.90e3', -2)
+
+        ],
+
+        'QF8b': [
+
+            StandardPossibleAnswer('1.65e-4', '1.55e-4', '1.75e-4', 0),
+
+        ],
+
+        'QF9b': [
+
+            StandardPossibleAnswer('1.02e-8', '0.92e-8', '1.22e-8', 0),
+
+        ],
+
+        'QF10b': [
+
+            StandardPossibleAnswer('4.71e0', '4.61e0', '4.81e0', 0),
+
+        ],
+
+        'QF11b': [
+
+            StandardPossibleAnswer('1.28e4', '1.18e4', '1.38e4', 0),
+
+            StandardPossibleAnswer('7.40e3', '7.30e3', '7.50e3', -2),
+
+        ],
+
+        'QF12b': [
+
+            StandardPossibleAnswer('4.12e-9', '4.02e-9', '4.22e-9', 0),
+
+        ],
+
+    }
+
+    OPEN_QUESTION_SOURCE = {
+
+        # 'QO2': ReadFromMatriculeMarkCsv('q2-marks.csv', 'QO2'), # ReadFromAnnotate(''),
+
+    }
     
+def compute_mark_list(note, points_distrib:(3,1,2,2,1,1)):
+    """
+    with points_distrib=(3,1,2,2,1,1):
+    if note == 'vxvvxx' yields 3,0,2,2,0,0
+    if note == 'vxvv'   yields 3,0,2,2,0,0
+    if note == 'fx-vxx' yields 2,0,1,2,0,0  # - means 1, f means 2
+    if note == '2x1vxx' yields 2,0,1,2,0,0  # can give number
+    if note == '5x1vxx' -> ValueError
+    if note == 'vvvvvvv' -> ValueError
+    """
+    points = (3,1,2,2,1,1)
+    assert sum(points_distrib) == 10
+    n = len(points_distrib)
+    assert len(note) <= n, note
+    assert set(note) <= set('fvx-0123456789'), "Unrecognized characters: {}".format(set(note) - set('fvx-0123456789'))
+    exp = note + (n - len(note)) * 'x'
+    assert len(exp) == n
+    
+    for n,p in zip(exp, points_distrib):
+        if n == 'v':
+            yield p
+        elif n == 'x':
+            yield 0
+        elif n in tuple('0123456789'):
+            if int(n) > p:
+                raise ValueError(f'Cannot have {n} points when maximum is {p}')
+            yield int(n)
+        elif n == 'f':
+            if not p > 2:
+                raise ValueError(f'Cannot have "f" when line has {p} points')
+            yield 2
+        elif n == '-':
+            if p == 1:
+                warning(f'Should not have "-" when line has {p} points. On {note}')
+            if p == 0:
+                raise ValueError(f'Cannot have "-" when line has {p} points. On {note}')
+            yield 1
+
+def GenerateMarksFromCsv(*, annotate_file='annotate.csv', project='..', weights:'Tuple[int]', output='marks.csv'):
+    """
+    From <annotate_file> (annotate.csv) (two columns: src, annot)
+    And current db in <project> (default '..')
+    Generates <output_file> (marks.csv) (two columns: matricule, mark_on_10)
+    
+    annot contains characters in the set 'vxf-012345789'
+    <weights> is a list of positive int
+    """
+    # p.add_argument('--annotate_file', default='annotate.csv')
+    # p.add_argument('--project', default='..')
+    # p.add_argument('--weights', type=int, nargs='+')
+    # p.add_argument('-o', '--output', default='marks.csv')
+    
+    connection = sqlite3.connect(project + '/data/capture.sqlite')
+    Assoc = dict(connection.execute('select src, student from capture_page'))
+    Annot = dict(csv.reader(open('annotate.csv')))
+
+    Marks = {
+        Assoc['%PROJET/scans/' + src]:
+        sum(compute_mark_list(annot, weights))
+        for src, annot in Annot.items()
+    }
+    
+    with OutFile(output, 'w') as out:
+        csv.writer(out).writerows(Marks.items())
+
+
 def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
     qf_answers = exam_info.ANSWERS
     SERIES = exam_info.SERIES
@@ -981,7 +1162,7 @@ def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
     
     data_marks = []
     errors = []
-    with CSVOrXLWriter(OUT_FILE, print_created=True) as writer:
+    with CSVOrXLWriter(OUT_FILE + '_questions', print_created=True) as writer:
         writer.writerow(('COPIE','MATRICULE','QUESTION','MARK','ANNOTATION','COMMENTS'))
         for serie in SERIES:
             proj = PROJECT_NAME.format(serie=serie)
@@ -1091,9 +1272,10 @@ def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
                     data_marks.append((examfull, matricule, basename, mark))
     
     if errors:
+        error('At least one error occured, stopping here.')
         return
     
-    # generate pretty xl
+    # generate pretty xlsx
     # TODO: make it work for series
     
     reductions = {}
@@ -1150,7 +1332,7 @@ def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
     all_questions_without_series = sorted_by_key(set(reductions.get(q,q) for q in all_questions))
     all_possible_questions = set(all_questions_without_series) & set(reductions.values())
     
-    with CSVOrXLWriter(OUT_FILE + '_pretty', print_created=True) as writer:
+    with CSVOrXLWriter(OUT_FILE + '_grid', print_created=True) as writer:
         firstrow = ['MATRICULE', 'EXAM'] + list(all_questions_without_series)
         writer.writerow(firstrow)
         for matricule in sorted(map(int, student_info)):
@@ -1164,3 +1346,9 @@ def ComputeMarks(exam_info, *, OUT_FILE='all_marks'):
                         only(p for p,q in reductions.items() if q == question and p in student_info[matricule]['questions'])
                     ]
                 ])
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    # subcommand GenerateAnswers, GenerateSrcList, DoAssociationAuto, ComputeMarks, GenerateMarksFromCsv
+    args = parser.parse_args()
