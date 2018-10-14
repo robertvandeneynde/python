@@ -376,7 +376,7 @@ def dir_decorate(x, *, underscore=False, callable=True):
     return list(map(lambda t:t[1], sorted((decoration(getattr(x,n)), n + decoration(getattr(x, n))) for n in dir(x) if keep(n))))
     # return [n + decoration(getattr(x, n)) for n in dir(x)]
 
-desc_dir = descdir = dirdec = dirdecorate = durdesc = dir_decorate
+desc_dir = descdir = dirdec = dirdecorate = dirdesc = dir_decorate
 
 @infix
 def irange(*args):
