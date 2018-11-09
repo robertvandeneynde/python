@@ -163,6 +163,14 @@ def mapwith(function):
     return postfix(lambda *iterables: map(function, *iterables))
 
 s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
+
+def Map(f):
+    return postfix(lambda *its, map(f, *its))
+
+def Filter(f):
+    return postfix(lambda x: filter(f, x))
+
+S = '1 2 7 2'.split() | Map(int) | Filter(lambda x:x < 5) | postfix(set)
 ```
 
 # Useful for format 

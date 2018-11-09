@@ -7,7 +7,7 @@ from math import *
 if sys.version_info < (3,6):
     tau = 2 * pi
 
-# degrees cos, sin, tan
+## degrees cos, sin, tan
 cosd = lambda x: cos(radians(x)) if not(x % 90 == 0) else [1, 0, -1, 0][(x // 90) % 4]
 sind = lambda x: sin(radians(x)) if not(x % 90 == 0) else [0, 1, 0, -1][(x // 90) % 4]
 tand = lambda x: sind(x)/cosd(x)
@@ -16,10 +16,10 @@ atan2d = lambda y, x: degrees(atan(y, x))
 acosd = lambda x: degrees(acos(x)) if not(x in (-1,0,1)) else [180, 90, 0][int(x)+1]
 asind = lambda x: degrees(asin(x)) if not(x in (-1,0,1)) else [-90, 0, 90][int(x)+1]
 
-# french
+## french
 racine = sqrt
 
-# log, ln, log10
+## log, ln, log10
 ln = math.log
 
 def log(x, base=None):
@@ -27,7 +27,7 @@ def log(x, base=None):
         raise ValueError('Log without a base is ambiguous, use log10 or ln')
     return math.log(x, base)
 
-# import *
+## import *
 import itertools
 from itertools import *
 
@@ -37,7 +37,7 @@ from functools import *
 from operator import *
 from collections import *
 
-# import module
+## import module
 if sys.version_info[0] >= 3:
     import html
 
@@ -50,19 +50,22 @@ import re
 import json
 import csv
 import sqlite3
+import subprocess
+import subprocess as sub
 
 from pprint import pprint
+from glob import glob
 
 from fractions import Fraction
-frac = F = Fraction # from fractions import Fraction as F
+frac = F = Fraction  # from fractions import Fraction as F
 
-# funcoperators
+## funcoperators
 try:
     from funcoperators import infix, postfix, unary
 except ImportError:
     infix = postfix = unary = lambda x:x
 
-# datetime
+## datetime
 from datetime import date, time, datetime, timedelta
 
 class CallableTimedelta(timedelta):
@@ -75,7 +78,7 @@ combine = infix(datetime.combine)
 now = datetime.now
 today = datetime.today
 
-# datetime utils
+## datetime utils
 @postfix
 def french_date(date):
     return date.strftime("%d/%m/%Y %Hh%M")
@@ -87,7 +90,7 @@ def french_date_only(date):
 datefrench = datefr = date_french = frenchdate = french_date
 datefrenchonly = dateonlyfr = date_only_french = frenchdateonly = french_date_only
 
-# operator
+## operator
 import operator
 ops = operators = {
     '+': operator.add,
@@ -117,10 +120,10 @@ ops = operators = {
     'or': operator.or_,
 }
 
-# re
+## re
 Re = re.compile
 
-# numpy
+## numpy
 try:
     import numpy
     import numpy as np
@@ -134,14 +137,15 @@ except:
 if sys.version_info[0] >= 3:
     from importlib import reload
 
-# related to current projects
-# try:
-#     from mydjangoapp.views import *
-#     from mydjangoapp.models import *
-# except:
-#     pass
+## related to current projects
+try:
+    pass
+    #from mydjangoapp.views import *
+    #from mydjangoapp.models import *
+except:
+    pass
 
-# map, filter
+## map, filter
 if sys.version_info[0] < 3:
     lmap = map
     lfilter = filter
@@ -191,14 +195,16 @@ def whichall(iterable_of_x_condition):
     return [x for x,condition in iterable_of_x_condition if condition]
 
 makemap, makefilter, makelmap, makelfilter = mapwith, filterwith, lmapwith, lfilterwith
-# unicode stuff
+Map, Filter = mapwith, filterwith
+
+## unicode stuff
 try:
     import uniutils
     from uniutils import *  # uniname, hexord, uord, uordname, uniline, unicontext, unilinecat, unibasecat
 except:
     pass
 
-# 3D, gl shaders like
+## 3D, gl shaders like
 def vec3(x=None, y=None, z=None):
     '''
     vec3(1) == array((1,1,1))
@@ -223,7 +229,7 @@ def fmt2(x):
     return format(x, '.2f')
 fmt = fmt2
 
-# 3D + funcoperators, inline |dot| |cross| product
+## 3D + funcoperators, inline |dot| |cross| product
 try:
     import funcoperators 
     from funcoperators import infix, prefix, postfix
@@ -243,7 +249,7 @@ else:
         dot = infix(numpy.dot)
         cross = infix(numpy.cross)
 
-# Statistical stuffs
+## Statistical stuffs
 def mean(it):
     s = 0
     i = 0
@@ -299,7 +305,7 @@ def print_matrix(M):
             row[i] += ' ' * (widths[i] - len(row[i]))
     print('\n'.join(' '.join(row) for row in M))
 
-# urllib
+## urllib
 def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
     from urllib.parse import urlparse, parse_qs
     
@@ -324,7 +330,7 @@ def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
     return dict(result)
 
 
-# functional tools
+## functional tools
 try:
     from funcoperators import elipartial
 except ImportError:
@@ -338,8 +344,13 @@ try:
 except ImportError:
     pass
 
+## introspection
 @postfix
-def desc(x, *, underscore=False, callable=False):
+def desc(x, *, underscore=False, callable=False, attrs=None):
+    if isinstance(attrs, str):
+        attrs = set(attrs.split())
+    elif attrs is not None and not isinstance(attrs, (set, frozenset)):
+        attrs = set(attrs)
     
     def keep1(n):
         return True if callable else not hasattr(getattr(x,n), '__call__')
@@ -347,10 +358,18 @@ def desc(x, *, underscore=False, callable=False):
     def keep2(n):
         return True if underscore else not n.startswith('_')
     
-    return {n: getattr(x, n) for n in dir(x) if keep1(n) and keep2(n)}
+    def keep(n):
+        return keep1(n) and keep2(n) and (attrs is None or n in attrs)
+    
+    return {n: getattr(x, n) for n in dir(x) if keep(n)}
 
 @postfix
-def dir_decorate(x, *, underscore=False, callable=True):
+def dir_decorate(x, *, underscore=False, callable=True, attrs=None):
+    if isinstance(attrs, str):
+        attrs = set(attrs.split())
+    elif attrs is not None and not isinstance(attrs, (set, frozenset)):
+        attrs = set(attrs)
+        
     def reduction(name):
         return 'function' if name == 'builtin_function_or_method' else name
     
@@ -367,17 +386,26 @@ def dir_decorate(x, *, underscore=False, callable=True):
         return True if underscore else not n.startswith('_')
     
     def keep(n):
-        return keep1(n) and keep2(n)
+        return keep1(n) and keep2(n) and (attrs is None or n in attrs)
     
     def filtered(x,n):
         return ((True if callable else not hasattr(getattr(x,n), '__call__')
             and (True if underscore else not n.startswith('_'))))
     
-    return list(map(lambda t:t[1], sorted((decoration(getattr(x,n)), n + decoration(getattr(x, n))) for n in dir(x) if keep(n))))
+    def sorted_key(iterable_of_2tuple):
+        return [b for a,b in sorted(iterable_of_2tuple)]
+    
+    return sorted_key((d, n + d) for n in dir(x) if keep(n) for d in [decoration(getattr(x,n))])
     # return [n + decoration(getattr(x, n)) for n in dir(x)]
+    # return [n + d for n in dir(x) for d in [decoration(getattr(x,n))]]
 
 desc_dir = descdir = dirdec = dirdecorate = dirdesc = dir_decorate
 
+@postfix
+def plddesc(*a, **b):
+    print('\n'.join(ddesc(*a, **b)))
+
+## ranges
 @infix
 def irange(*args):
     """
@@ -404,7 +432,7 @@ else:
 
 inclusive = irange
 
-# utils
+## utils
 def groupdict(iterable):
     """
     >>> groupdict((i%2, i) for i in range(10))
@@ -424,5 +452,42 @@ def setdiff(A, B):
         B = set(B)
     return (A - B, B - A)
 
-# custom aliases :
+def print_list_dict(dic, **kwargs):
+    print('\n'.join('{}: {}'.format(x,y) for x,y in dic.items()), **kwargs)
+
+def print_list(iterable, **kwargs):
+    print('\n'.join(str(s) for s in iterable), **kwargs)
+
+def dictuniq(it):
+    d = {}
+    for a,b in it:
+        if a in d:
+            raise ValueError
+        d[a] = b
+    return d
+
+def mro(x):
+    return x.__class__.__mro__
+
+## custom short aliases
 ul = uniline
+pl, pld = print_list, print_list_dict
+ddesc = dir_decorate
+
+def lentype(x):
+    return len(x), type(x)
+
+## clipboard
+def pbpaste():
+    import subprocess
+    return subprocess.check_output('xclip -selection clipboard -o'.split()).decode('utf-8')
+
+def pbcopy(s):
+    import subprocess
+    p = subprocess.Popen('xclip -selection clipboard'.split(), stdin=subprocess.PIPE)
+    p.communicate(s.encode('utf-8'))
+    # Warning: Use communicate() rather than .stdin.write, .stdout.read or .stderr.read to avoid deadlocks due to any of the other OS pipe buffers filling up and blocking the child process. 
+    #p.stdin.write(s.encode('utf-8'))
+    #p.stdin.close()
+    
+## misc.

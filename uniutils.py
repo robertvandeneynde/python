@@ -40,7 +40,8 @@ def uniname(s):
     ['GREEK SMALL LETTER ALPHA', 'GREEK SMALL LETTER BETA', 'GREEK SMALL LETTER GAMMA']
     """
     return (unicodedata.name(s, '?') if unicodedata.category(s) != 'Cc' else 
-            unicodedata.name(chr(0x2400 + ord(s))).replace('SYMBOL FOR', '<CONTROL>') if ord(s) < 32 or ord(s) == 127 else
+            unicodedata.name(chr(0x2400 + ord(s))).replace('SYMBOL FOR', '<CONTROL>') if ord(s) < 32 else
+            '<CONTROL> DELETE' if ord(s) == 127 else 
             '<CONTROL>')
     
 @multiple_makes_lmap
@@ -185,14 +186,14 @@ def unicontext(s, height=5):
     name = unicodedata.name(s, '?')
     print('U+' + hex(ord(s))[2:].zfill(4).upper(), s, name)
     b = ord(s) >> 4 << 4
-    print('       ' + ' '.join('v' if i == ord(s) % 16 else ' ' for i in range(16)))
+    print('       ' + ' '.join('↓' if i == ord(s) % 16 else ' ' for i in range(16)))
     print('       ' + ' '.join(hex(i)[2:].upper() for i in range(16)))
     for n in (b + i * 16 for i in range(-height,+height+1)):
         if n < 0x10: # contains \n and \t annoying to print
             if n >= 0:
-                print(('U+' if n != b else '>>') + '0000' + 32 * ' ')
+                print(('U+' if n != b else ' →') + '0000' + 32 * ' ')
         else:
-            print(('U+' if n != b else '>>') + hex(n)[2:].zfill(4).upper() + ' ' +
+            print(('U+' if n != b else ' →') + hex(n)[2:].zfill(4).upper() + ' ' +
                    ' '.join((greenizebold if n + i == ord(s) else lambda x:x)(chr(n + i))
                             for i in range(16)))
 
