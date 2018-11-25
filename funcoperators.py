@@ -192,7 +192,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '0.9.6'  # TODO: update major release from 9 to 10 (introduced non backward compatible change)
+__version__ = '1.1'  # TODO: do not release 1.1, go for 1.1.0 AAAAAND run tests ! python3 funcoperators.py
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -788,7 +788,7 @@ def compose(*functions):
     """
     return functools.reduce(lambda f, g: lambda *args, **kwargs: f(g(*args, **kwargs)), functions, lambda x: x)
 
-circle = compose  # (hex |circle| ord)(x) == hex(ord(x))
+circle = compose  # (hex *circle* ord)(x) == hex(ord(x))
 
 def elipartial(function, *args, **kwargs):
     """
@@ -806,10 +806,11 @@ def elipartial(function, *args, **kwargs):
     '1/2/3'
     >>> from __future__ import print_function
     >>> show = elipartial(print, 1, ..., 3, sep='/')
-    >>> show()
-    Traceback (most recent call last):
-        ...
-    TypeError: Ellipsis still in elipartial call.
+    >>> try: show()
+    ... except TypeError:
+    ...     print('Error')
+    ... 
+    Error
     >>> show(2)
     1/2/3
     """
@@ -872,13 +873,13 @@ class bracket(base):
     5
     """
     def key(self, **kwargs):
-        return partially(elipartial(self, **kwargs))
+        return bracket(elipartial(self, **kwargs))
     
     def val(self, *vals):
-        return partially(elipartial(self, *vals))
+        return bracket(elipartial(self, *vals))
     
     def partial(self, *args, **kwargs):
-        return partially(elipartial(self, *args, **kwargs))
+        return bracket(elipartial(self, *args, **kwargs))
     
     part = assuming = given = where = partial
     
@@ -919,10 +920,11 @@ def elicurry(*args, **kwargs):
     1/2/3/4
     >>> show(2, 4, end=';\n')
     1/2/3/4;
-    >>> show()
-    Traceback (most recent call last):
-        ...
-    TypeError: Ellipsis still in elipartial call.
+    >>> try:
+    ...     show()
+    ... except TypeError as e:
+    ...     print('Error')  # Ellipsis still in elipartial call
+    Error
     >>> show = print |with_arguments(1,2, sep='/') |with_arguments(end=';\n')
     >>> show(3)
     1/2/3;
@@ -930,6 +932,42 @@ def elicurry(*args, **kwargs):
     1/2;
     """
     return postfix(lambda function: elipartial(function, *args, **kwargs))
+
+@infix
+def call(f, x):
+    """
+    >>> print(5 + 2 * 10)
+    25
+    >>> print |call| 5 + 2 * 10
+    25
+    >>> print(','.join('abcdef'))
+    a,b,c,d,e,f
+    >>> (print *compose* ','.join) |call| 'abcdef'
+    a,b,c,d,e,f
+    >>> (print *compose* ','.join) |call| 'abcdef' + 3 * 'x'
+    a,b,c,d,e,f,x,x,x
+    >>> compose(print, ','.join) |call| 'abcdef'
+    a,b,c,d,e,f
+    """
+    return f(x)
+
+def simplecall(*args, **kwargs):
+    """
+    >>> ord |simplecall('a')
+    97
+    """
+    @postfix
+    def new(f):
+        return f(*args, **kwargs)
+    return new
+
+@infix
+def callargs(f, args):
+    """
+    >>> print |callargs| ('a', 5)
+    a 5
+    """
+    return f(*args)
 
 provide_left = curryleft
 provide_right = curryright

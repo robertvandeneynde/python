@@ -445,6 +445,8 @@ def groupdict(iterable):
         d[x].append(y)
     return d
 
+groupings = groupdict
+
 def setdiff(A, B):
     if not isinstance(A, (set, frozenset)):
         A = set(A)
@@ -469,10 +471,25 @@ def dictuniq(it):
 def mro(x):
     return x.__class__.__mro__
 
+## modification of some standard functions
+
+# implicit map
+def all(*args):
+    """ all(func, iterable) is all(map(func, iterable)) """
+    import builtins
+    return builtins.all(*args) if len(args) != 2 else builtins.all(map(args[0], args[1]))
+
+# implicit map
+def any(*args):
+    """ any(func, iterable) is any(map(func, iterable)) """
+    import builtins
+    return builtins.any(*args) if len(args) != 2 else builtins.any(map(args[0], args[1]))
+
 ## custom short aliases
 ul = uniline
 pl, pld = print_list, print_list_dict
 ddesc = dir_decorate
+pfmt2 = print *circle* fmt2
 
 def lentype(x):
     return len(x), type(x)

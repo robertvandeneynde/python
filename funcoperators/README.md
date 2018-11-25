@@ -197,6 +197,38 @@ s = display('A')  # s = '0x41'
 display = hex *circle* ord 
 ```
 
+## Using call for inline compose
+
+```python
+>>> print(5 + 2 * 10)
+25
+>>> print |call| 5 + 2 * 10
+25
+>>> print(','.join('abcdef'))
+a,b,c,d,e,f
+>>> (print *compose* ' '.join) |call| 'abcdef'
+a,b,c,d,e,f
+>>> (print *compose* ' '.join) |call| 'abcdef' + 3 * 'x'
+a,b,c,d,e,f,x,x,x
+>>> compose(print, ','.join) |call| 'abcdef'
+a,b,c,d,e,f
+```
+
+```python
+>>> ord |simplecall('a')
+97
+"""
+@postfix
+def new(f):
+    return f(*args, **kwargs)
+return new
+```
+
+```python
+>>> print |callargs| ('a', 5)
+a 5
+```
+
 # More partial syntax
 
 The library adds sugar to functools.partial, using functions called `curry` (and variants like `curryright`, `simplecurry`) and `partially`. The name `curry` comes from other languages.
