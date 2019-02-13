@@ -3,6 +3,7 @@
 import argparse
 p = argparse.ArgumentParser()
 p.add_argument('file', nargs='?', default=None)
+p.add_argument('--replace-lt', action='store_true')
 args = p.parse_args()
 
 if args.file:
@@ -27,7 +28,10 @@ for i in range(len(L)):
         continue
     L[i] = a.zfill(2) + ':' + b.zfill(2) + c
 
+transform = ((lambda x: x.replace('<', '‹').replace('>', '›')) if args.replace_lt
+             else lambda x:x)
+
 with (OutFile(args.file + '.index', 'w') if args.file else sys.stdout) as f:
-    f.write('\n'.join(L))
+    f.write(transform('\n'.join(L)))
     
     

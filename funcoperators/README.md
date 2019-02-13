@@ -1,10 +1,10 @@
-Always wanted to add custom operators ?
+Always wanted to add custom operators to your functions ?
 
 ```python
-a = 2 + (1,2,3) /dot/ (4,5,6)  # a = 2 + dot((1,2,3), (4,5,6))
-Y = [1,2,7,0,2,0] |no_zero |plus_one  # Y == [2,3,8,3]
-square = elipartial(pow, ..., 2)  # square = lambda x: pow(x, 2)
-display = hex /compose/ ord  # display = lambda x: hex(ord(x))
+a = 2 + (1,2,3) /dot/ (4,5,6)                 # a = 2 + dot((1,2,3), (4,5,6))
+Y = [1,2,7,0,2,0] |no_zero |plus(1) |to(set)  # Y == {2,3,8}
+square = elipartial(pow, ..., 2)              # square = lambda x: pow(x, 2)
+display = hex *compose* ord                   # display = lambda x: hex(ord(x))
 ```
 
 This example shows how infix operators can be created,
@@ -127,7 +127,7 @@ assert [] /isinstance/ (list, tuple)
 assert 1 / 2 |isinstance| float
 ```
 
-# Useful for pipes: postfix
+# Useful for pipes: postfix (alias to)
 
 In bash, a functionality called _pipes_ is useful to reuse an expression and change the behavior by just adding code _at the end_.
 The library can be used for that.
@@ -145,6 +145,17 @@ Y = [1,2,7,0,2,0] |no_zero |plus_one  # Y == [2,3,8,3]
 Y = plus_one(no_zero([1,2,7,0,2,0]))  # Y == [2,3,8,3]
 ```
 
+Using `to = postfix` makes it quite readable in a pipe.
+
+```python
+>>> from funcoperators import postfix as to  # funcoperators version 0.x
+>>> from funcoperators import to             # funcoperators version 1.x
+>>> 'hello' |to(str.upper) |to(lambda x:x + '!') |to('I said "{}"'.format) |to(print)
+I said "HELLO!"
+>>> print('I said "{}"'.format('hello'.upper() + '!'))
+I said "HELLO!"
+```
+
 # Pipes with arguments: pipe factory
 
 Sometimes, pipes want extra information, for example in our last example, `no_zero` is a special case of a pipe that filters out a value,
@@ -157,23 +168,21 @@ def filter_out(x):
         return [y for y in L if y != x]
     return f
 
+# shorter with a lambda
+def filter_out(x):
+    return postfix(lambda L:[y for y in L if y != x])
+
 L = [1,2,7,0,2,0] | filter_out(0)  # L == [2,3,8,3]
 
-def mapwith(function):
-    return postfix(lambda *iterables: map(function, *iterables))
+from funcoperators import mapwith
+s = '1 2 7 2'.split() | mapwith(int) | to(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
 
-s = '1 2 7 2'.split() | mapwith(int) | postfix(sum)  # s = 12 = sum(map(int, '1 2 7 2'.split()))
-
-def Map(f):
-    return postfix(lambda *its, map(f, *its))
-
-def Filter(f):
-    return postfix(lambda x: filter(f, x))
-
-S = '1 2 7 2'.split() | Map(int) | Filter(lambda x:x < 5) | postfix(set)
+from funcoperators import mapwith as Map
+from funcoperators import filterwith as Filter
+S = '1 2 7 2'.split() | Map(int) | Filter(lambda x:x < 5) | to(set)
 ```
 
-# Useful for format 
+# Useful for format and join
 
 ```python
 >>> 42 | format /curryright/ 'x'
@@ -181,6 +190,11 @@ S = '1 2 7 2'.split() | Map(int) | Filter(lambda x:x < 5) | postfix(set)
 >>> formatwith = lambda fmt: postfix(lambda value: format(value, fmt))
 >>> 52 |formatwith('x')
 '2a'
+>>> from funcoperators import to
+>>> 3.1415 |to('{:.02}'.format)
+'3.1'
+>>> [1, 2, 7, 2] |mapwith(str) |to('/'.join) |to(print)
+1/2/7/2
 ```
 
 # Function composition (compose, alias circle)
@@ -194,34 +208,37 @@ from funcoperators import compose
 display = hex /compose/ ord
 s = display('A')  # s = '0x41'
 
-display = hex *circle* ord 
+display = hex *circle* ord
+
+from funcoperators import compose as o
+display = hex -o- ord  # looks like a dot
+```
+
+`compose` can have more than two functions.
+
+```python
+f = compose(str.upper, hex, lambda x:x+1, ord)  # simple function
+f = str.upper /compose/ hex /compose/ (lambda x:x+1) /compose/ ord  # operator
 ```
 
 ## Using call for inline compose
 
 ```python
->>> print(5 + 2 * 10)
+>>> print(5 + 2 * 10, 'B', sep='/')
 25
->>> print |call| 5 + 2 * 10
-25
->>> print(','.join('abcdef'))
-a,b,c,d,e,f
->>> (print *compose* ' '.join) |call| 'abcdef'
-a,b,c,d,e,f
->>> (print *compose* ' '.join) |call| 'abcdef' + 3 * 'x'
+>>> print |call(5 + 2 * 10, 'B', sep='/')
+25/B
+>>> print(','.join('abcdef' + 3 * 'x'))
 a,b,c,d,e,f,x,x,x
->>> compose(print, ','.join) |call| 'abcdef'
-a,b,c,d,e,f
+>>> print *compose* ' '.join |call('abcdef' + 3 * 'x')
+a,b,c,d,e,f,x,x,x
+>>> compose(print, ','.join) |call('abcdef' + 3 * 'x')
+a,b,c,d,e,f,x,x,x
 ```
 
 ```python
->>> ord |simplecall('a')
-97
-"""
-@postfix
-def new(f):
-    return f(*args, **kwargs)
-return new
+>>> len |infixcall| 'hallo' * 3
+15
 ```
 
 ```python
@@ -263,7 +280,7 @@ def f(x,y,z):
     return x - y + 2 * z
 
 r = f(1,2,3)
-g = f[1]  # g = a function with two arguments: x,y
+g = f[1]  # g = a function with two arguments: y,z
 r = g(2,3)
 r = f[1](2,3)
 r = f[1][2][3]()
@@ -365,3 +382,6 @@ show = print |latercall(1, ..., 3, sep='/')
 # More examples
 
 See more examples in the test cases in [source code](https://github.com/robertvandeneynde/python/blob/master/funcoperators.py).
+
+# Release Notes
+Version 1.0 created some non backward-compatible change (`call`) and included useful use cases (`to`, `mapwith`)

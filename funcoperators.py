@@ -192,7 +192,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '1.1'  # TODO: do not release 1.1, go for 1.1.0 AAAAAND run tests ! python3 funcoperators.py
+__version__ = '1.1.3'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
@@ -550,6 +550,8 @@ class postfix(base):
         = __ror__\
         = base.__call__
 
+to = postfix
+
 class prefix(base):
     __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __pow__ = __and__ = __xor__ = __rshift__ = __lshift__\
         = __or__\
@@ -597,7 +599,7 @@ def infixmethod(methodname):
     L |append| 5
     
     # Don't do this:
-    append = unary(list.append)  # works, but does not apply on inheritance
+    append = infix(list.append)  # works, but does not apply on inheritance
     """
     return infix(lambda self, param: getattr(self, methodname)(param))
 
@@ -881,6 +883,9 @@ class bracket(base):
     def partial(self, *args, **kwargs):
         return bracket(elipartial(self, *args, **kwargs))
     
+    def partial(self, *args, **kwargs):
+        return elipartial(self, *args, **kwargs)
+    
     part = assuming = given = where = partial
     
     def __getitem__(self, item):
@@ -934,27 +939,29 @@ def elicurry(*args, **kwargs):
     return postfix(lambda function: elipartial(function, *args, **kwargs))
 
 @infix
-def call(f, x):
-    """
+def infixcall(f, x):
+    """WARNING: Renamed from "call" to "infixcall" in Version 1.0
     >>> print(5 + 2 * 10)
     25
-    >>> print |call| 5 + 2 * 10
+    >>> print |infixcall| 5 + 2 * 10
     25
     >>> print(','.join('abcdef'))
     a,b,c,d,e,f
-    >>> (print *compose* ','.join) |call| 'abcdef'
+    >>> (print *compose* ','.join) |infixcall| 'abcdef'
     a,b,c,d,e,f
-    >>> (print *compose* ','.join) |call| 'abcdef' + 3 * 'x'
+    >>> (print *compose* ','.join) |infixcall| 'abcdef' + 3 * 'x'
     a,b,c,d,e,f,x,x,x
-    >>> compose(print, ','.join) |call| 'abcdef'
+    >>> compose(print, ','.join) |infixcall| 'abcdef'
     a,b,c,d,e,f
     """
     return f(x)
 
-def simplecall(*args, **kwargs):
-    """
-    >>> ord |simplecall('a')
+def call(*args, **kwargs):
+    """WARNING: Renamed from "simplecall" to "call" in Version 1.0
+    >>> ord |call('a')
     97
+    >>> print *compose* ','.join |call('abcdef')
+    a,b,c,d,e,f
     """
     @postfix
     def new(f):
@@ -974,6 +981,22 @@ provide_right = curryright
 add_args = elicurryargs
 with_arguments = elicurry
 latercall = deferredcall = elicurry
+
+# utils
+
+def mapwith(function):
+    """
+    >>> [1, 2, 7, 2] |mapwith(str) |to(list)
+    ['1', '2', '7', '2']
+    """
+    return postfix(lambda *iterables: map(function, *iterables))
+
+def filterwith(function):
+    """
+    >>> [1, 2, 7, 2] |filterwith(lambda x:x < 5) |to(list)
+    [1, 2, 2]
+    """
+    return postfix(lambda iterable: filter(function, iterable))
 
 if __name__ == '__main__':
     import sys

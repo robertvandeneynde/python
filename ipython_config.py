@@ -55,6 +55,7 @@ class DateTimePrompts(Prompts):
         self.no_timebased = no_timebased
     
     def in_prompt_tokens(self, cli=None):
+        assert cli is None  # IPython 6 to 7
         from datetime import datetime, timedelta
         
         if not hasattr(self, 'memory'):
@@ -100,9 +101,9 @@ class DateTimePrompts(Prompts):
         
         return [
             (Token.Comment, '# ' + (datestr1 if datestr1 == datestr2 else '{} - {}'.format(datestr1, datestr2)) + ' ' + '\n')
-        ] * printed[n] + Prompts.in_prompt_tokens(self, cli)
+        ] * printed[n] + Prompts.in_prompt_tokens(self)  # Ipython 6 to 7 (no cli)
     
-c.TerminalInteractiveShell.prompts_class = type('MyPrompt', (DateTimePrompts, NoContinuationPrompts), {})
+c.TerminalInteractiveShell.prompts_class = type('MyPrompt', (DateTimePrompts, SpaceContinuationPrompts), {})
 
 ################################
 # Defaults options uncommented #

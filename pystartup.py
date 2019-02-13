@@ -10,7 +10,7 @@ if sys.version_info < (3,6):
 ## degrees cos, sin, tan
 cosd = lambda x: cos(radians(x)) if not(x % 90 == 0) else [1, 0, -1, 0][(x // 90) % 4]
 sind = lambda x: sin(radians(x)) if not(x % 90 == 0) else [0, 1, 0, -1][(x // 90) % 4]
-tand = lambda x: sind(x)/cosd(x)
+tand = lambda x: sind(x) / cosd(x)
 atand = lambda x: degrees(atan(x))
 atan2d = lambda y, x: degrees(atan(y, x))
 acosd = lambda x: degrees(acos(x)) if not(x in (-1,0,1)) else [180, 90, 0][int(x)+1]
@@ -43,6 +43,9 @@ if sys.version_info[0] >= 3:
 
 import random
 from random import randint, randrange, shuffle, choice
+
+import string
+from string import ascii_letters, ascii_lowercase, ascii_uppercase
 
 import argparse
 import unicodedata
@@ -236,7 +239,7 @@ try:
 except ImportError:
     pass
 else:
-    tostr, tolist, totuple, toset, tochr, toord = map(postfix, (str, list, tuple, set, chr, ord))
+    tostr, tolist, totuple, toset, tochr, toord, tojoin = map(postfix, (str, list, tuple, set, chr, ord, ''.join))
     
     from fractions import Fraction
     F = div = frac = funcoperators.infix(Fraction)
@@ -289,7 +292,7 @@ def StatsWithData(it):
 def Stats(it):
     s = StatsWithData(it)
     fields = tuple(f for f in s._fields if f != 'data')
-    return namedtuple('Stats', fields)(*tuple(getattr(s,f) for f in fields))
+    return namedtuple('Stats', fields)(*(getattr(s,f) for f in fields))
 
 def stdev(it):
     return sqrt(variance(it))
@@ -311,7 +314,7 @@ def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
     
     result = urlparse(url)._asdict()
 
-    result['parsed_qs'] = parse_qs(result.pop('query'))
+    result['pqs'] = parse_qs(result.pop('query'))
     
     if not multiple:
         def single(a_dict):
@@ -319,13 +322,13 @@ def urlparsetotal(url, *, multiple=False, fragment_is_qs=False):
                 if not len(v) == 1:
                     raise ValueError("Doesn't have only one value {!r}: {}".format(k, v))
             return {k:v[0] for k,v in a_dict.items()}
-        result['parsed_qs'] = single(result['parsed_qs'])
+        result['pqs'] = single(result['pqs'])
 
     if fragment_is_qs:
-        result['fragment_qs'] = parse_qs(result.pop('fragment'))
+        result['fqs'] = parse_qs(result.pop('fragment'))
 
         if not multiple:
-            result['fragment_qs'] = single(result['fragment_qs'])
+            result['fqs'] = single(result['fqs'])
 
     return dict(result)
 
@@ -433,11 +436,17 @@ else:
 inclusive = irange
 
 ## utils
-def groupdict(iterable):
+def groupdict(iterable, *, key=None):
     """
     >>> groupdict((i%2, i) for i in range(10))
     {0: [0,2,4,6,8], 1: [1,3,5,7,9]}
+    >>> def rest(x): return i % 2
+    >>> groupdict(range(10), key=rest)
+    {0: [0,2,4,6,8], 1: [1,3,5,7,9]}
     """
+    if key is not None:
+        return groupdict((key(x), x) for x in iterable)
+
     d = {}
     for x,y in iterable:
         if x not in d:
@@ -445,7 +454,11 @@ def groupdict(iterable):
         d[x].append(y)
     return d
 
+def groupdictby(key, iterable):
+    return groupdict(iterable, key=key)
+
 groupings = groupdict
+groupingsby = groupdictby
 
 def setdiff(A, B):
     if not isinstance(A, (set, frozenset)):
@@ -490,6 +503,7 @@ ul = uniline
 pl, pld = print_list, print_list_dict
 ddesc = dir_decorate
 pfmt2 = print *circle* fmt2
+to = postfix # same as tolist, tostr, etc. tolist = to(list)
 
 def lentype(x):
     return len(x), type(x)
@@ -499,6 +513,7 @@ def pbpaste():
     import subprocess
     return subprocess.check_output('xclip -selection clipboard -o'.split()).decode('utf-8')
 
+@postfix
 def pbcopy(s):
     import subprocess
     p = subprocess.Popen('xclip -selection clipboard'.split(), stdin=subprocess.PIPE)
@@ -506,5 +521,7 @@ def pbcopy(s):
     # Warning: Use communicate() rather than .stdin.write, .stdout.read or .stderr.read to avoid deadlocks due to any of the other OS pipe buffers filling up and blocking the child process. 
     #p.stdin.write(s.encode('utf-8'))
     #p.stdin.close()
-    
+
+cc, cv = pbcopy, pbpaste
+
 ## misc.
