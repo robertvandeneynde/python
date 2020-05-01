@@ -529,18 +529,42 @@ def lentype(x):
     except: return None, type(x)
 
 ## clipboard
-def pbpaste(*, selection:'primary|secondary|clipboard'='clipboard'):
-    import subprocess
-    return subprocess.check_output(['xclip', '-selection', selection, '-o']).decode('utf-8')
+import platform
+if platform.system() == 'Linux':
+	def pbpaste(*, selection:'primary|secondary|clipboard'='clipboard'):
+		import subprocess
+		return subprocess.check_output(['xclip', '-selection', selection, '-o']).decode('utf-8')
 
-@postfix
-def pbcopy(s, *, selection:'primary|secondary|clipboard'='clipboard'):
-    import subprocess
-    p = subprocess.Popen(['xclip', '-selection', selection], stdin=subprocess.PIPE)
-    p.communicate(s.encode('utf-8'))
-    # Warning: Use communicate() rather than .stdin.write, .stdout.read or .stderr.read to avoid deadlocks due to any of the other OS pipe buffers filling up and blocking the child process. 
-    #p.stdin.write(s.encode('utf-8'))
-    #p.stdin.close()
+	@postfix
+	def pbcopy(s, *, selection:'primary|secondary|clipboard'='clipboard'):
+		import subprocess
+		p = subprocess.Popen(['xclip', '-selection', selection], stdin=subprocess.PIPE)
+		p.communicate(s.encode('utf-8'))
+		# Warning: Use communicate() rather than .stdin.write, .stdout.read or .stderr.read to avoid deadlocks due to any of the other OS pipe buffers filling up and blocking the child process. 
+		#p.stdin.write(s.encode('utf-8'))
+		#p.stdin.close()
+		
+elif platform.system() == 'Windows':
+    
+    # TODO: use subprocess and 'clip' command (clip < stream and echo "hello" | clip)
+    @postfix
+    def pbcopy(x):
+        from tkinter import Tk
+        r = Tk()
+        r.withdraw()
+        r.clipboard_clear()
+        r.clipboard_append(x) 
+        r.update() # now it stays on the clipboard after the window is closed
+        r.destroy()
+     
+    def pbpaste():
+        from tkinter import Tk
+        r = Tk()
+        r.withdraw()
+        s = r.clipboard_get()
+        r.update() # now it stays on the clipboard after the window is closed
+        r.destroy()
+        return s
 
 cc, cv = pbcopy, pbpaste
 ccm = partial(pbcopy, selection='primary')  # middle click
