@@ -60,7 +60,7 @@ from pprint import pprint
 from glob import glob
 
 from fractions import Fraction
-frac = F = Fraction  # from fractions import Fraction as F
+frac = Fraction  # from fractions import Fraction as F
 
 ## funcoperators
 try:
@@ -133,7 +133,7 @@ try:
     from numpy import array, matrix
     from numpy import cross, dot
     from numpy.linalg import norm
-    c = vec = lambda *args, **kwargs: numpy.array(args, **kwargs)
+    vec = lambda *args, **kwargs: numpy.array(args, **kwargs)
 except:
     pass
 
@@ -242,7 +242,7 @@ else:
     tostr, tolist, totuple, toset, tochr, toord, tojoin = map(postfix, (str, list, tuple, set, chr, ord, ''.join))
     
     from fractions import Fraction
-    F = div = frac = funcoperators.infix(Fraction)
+    div = frac = funcoperators.infix(Fraction)
     
     try:
         import numpy
@@ -436,26 +436,40 @@ else:
 inclusive = irange
 
 ## utils
-def groupdict(iterable, *, key=None):
+def groupdict(iterable, *, key=None, reduce=None, join=None):
     """
     >>> groupdict((i%2, i) for i in range(10))
     {0: [0,2,4,6,8], 1: [1,3,5,7,9]}
     >>> def rest(x): return i % 2
     >>> groupdict(range(10), key=rest)
     {0: [0,2,4,6,8], 1: [1,3,5,7,9]}
+    >>> groupdict(range(10), key=rest, reduce=sum)
+    {0: 20, 1: 25}
+    >>> groupdict('abc56', key=str.isdigit, join=''.join)
+    {True: '56', False: 'abc'}
     """
     if key is not None:
-        return groupdict((key(x), x) for x in iterable)
-
+        return groupdict(((key(x), x) for x in iterable), reduce=reduce, join=join)
+    
+    if join is not None and reduce is not None:
+        raise ValueError("join and reduce are mutually exclusive")
+    
     d = {}
+    
     for x,y in iterable:
         if x not in d:
             d[x] = []
         d[x].append(y)
+    
+    if join is not None:
+        return {x:join(map(str,y)) for x,y in d.items()}
+    if reduce is not None:
+        return {x:reduce(y) for x,y in d.items()}
+    
     return d
 
-def groupdictby(key, iterable):
-    return groupdict(iterable, key=key)
+def groupdictby(key, iterable, **kwargs):
+    return groupdict(iterable, key=key, **kwargs)
 
 groupings = groupdict
 groupingsby = groupdictby
@@ -504,24 +518,59 @@ pl, pld = print_list, print_list_dict
 ddesc = dir_decorate
 pfmt2 = print *circle* fmt2
 to = postfix # same as tolist, tostr, etc. tolist = to(list)
+c = compose  # vec
+F = frac
+nonascii = ''.join -c- filterwith(lambda x:ord(x) > 127) 
+uln = ulnonascii = ul -c- nonascii
+mapto = mapwith
 
 def lentype(x):
-    return len(x), type(x)
+    try: return len(x), type(x)
+    except: return None, type(x)
 
 ## clipboard
-def pbpaste():
+def pbpaste(*, selection:'primary|secondary|clipboard'='clipboard'):
     import subprocess
-    return subprocess.check_output('xclip -selection clipboard -o'.split()).decode('utf-8')
+    return subprocess.check_output(['xclip', '-selection', selection, '-o']).decode('utf-8')
 
 @postfix
-def pbcopy(s):
+def pbcopy(s, *, selection:'primary|secondary|clipboard'='clipboard'):
     import subprocess
-    p = subprocess.Popen('xclip -selection clipboard'.split(), stdin=subprocess.PIPE)
+    p = subprocess.Popen(['xclip', '-selection', selection], stdin=subprocess.PIPE)
     p.communicate(s.encode('utf-8'))
     # Warning: Use communicate() rather than .stdin.write, .stdout.read or .stderr.read to avoid deadlocks due to any of the other OS pipe buffers filling up and blocking the child process. 
     #p.stdin.write(s.encode('utf-8'))
     #p.stdin.close()
 
 cc, cv = pbcopy, pbpaste
+ccm = partial(pbcopy, selection='primary')  # middle click
+cvm = partial(pbpaste, selection='primary')  # middle click
 
 ## misc.
+
+def dictuniq(it):
+    d = {}
+    for a,b in it:
+        if a in d:
+            raise ValueError
+        d[a] = b
+    return d
+
+def formatwith(fmt):
+    return postfix(partial(format, format_spec=fmt)) # postfix(lambda x:format(x, fmt))
+
+def same_ast(a, b):
+    import ast
+    A, B = (ast.dump(ast.parse(x)) for x in (a, b))
+    return A == B
+    
+def pprint_ast(x, *, show_offsets=True):
+    import ast
+    import astpretty
+    astpretty.pprint(ast.parse(x), show_offsets=show_offsets)
+    
+#while True:
+#  subprocess.call('kdialog --passivepopup'.split() +
+#['h'.join(str(abs(now() - lever)).split(':')[:2])] + [str(10)]); sleep(60*3)
+from urllib.parse import urlunparse
+from pathlib import Path as path

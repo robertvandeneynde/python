@@ -648,6 +648,8 @@ def curryright(function, arg):
     """
     return lambda x: function(x, arg)
 
+rcurry = curryright
+
 class partially(base):
     """
     >>> @partially

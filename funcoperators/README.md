@@ -225,12 +225,12 @@ f = str.upper /compose/ hex /compose/ (lambda x:x+1) /compose/ ord  # operator
 
 ```python
 >>> print(5 + 2 * 10, 'B', sep='/')
-25
+25/B
 >>> print |call(5 + 2 * 10, 'B', sep='/')
 25/B
 >>> print(','.join('abcdef' + 3 * 'x'))
 a,b,c,d,e,f,x,x,x
->>> print *compose* ' '.join |call('abcdef' + 3 * 'x')
+>>> print *compose* ','.join |call('abcdef' + 3 * 'x')
 a,b,c,d,e,f,x,x,x
 >>> compose(print, ','.join) |call('abcdef' + 3 * 'x')
 a,b,c,d,e,f,x,x,x
