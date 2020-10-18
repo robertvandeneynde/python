@@ -76,6 +76,7 @@ for svg_file in args.svg_file:
         root = doc.documentElement
 
     def set_union(iterable):
+        """ set_union( [ {1,2}, {3,4}, {1,7} ] ) == {1,2,3,4,7} """
         it = iter(iterable)
         S1 = next(it, set())
         return set.union(S1, *it)

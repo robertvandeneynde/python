@@ -596,5 +596,13 @@ def pprint_ast(x, *, show_offsets=True):
 #while True:
 #  subprocess.call('kdialog --passivepopup'.split() +
 #['h'.join(str(abs(now() - lever)).split(':')[:2])] + [str(10)]); sleep(60*3)
-from urllib.parse import urlunparse
+#from urllib.parse import urlunparse
+import urllib
 from pathlib import Path as path
+
+def unquotecc(): 
+    import urllib
+    #cv() | to(urllib.parse.unquote) | cc
+    cc(urllib.parse.unquote(cv()))
+    
+ccunquote = unquotecc

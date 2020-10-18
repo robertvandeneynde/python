@@ -17,7 +17,10 @@ from re import compile as Re
 R = Re('(\d+)[h:](\d*)')
 
 match = R.fullmatch(x)
-if match:
+if not match:
+    import sys
+    print("Wrong match, must be", R.pattern, file=sys.stderr)
+else:
     h, m = match.groups()
     h, m = int(h), int(m or '0')
 
@@ -25,7 +28,7 @@ if match:
     if d < N:
         d += timedelta(days=1)
 
-delta = d - N
+    delta = d - N
 
-print(*str(delta).split(':')[:2], sep=':')
+    print(*str(delta).split(':')[:2], sep=':')
 

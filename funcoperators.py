@@ -504,6 +504,7 @@ class _BasicTests(unittest.TestCase):
             g = f[1,2]
             g(3)
     
+from functools import update_wrapper as _update_wrapper
 class base:
     def __init__(self, function):
         self.function = function
@@ -543,7 +544,7 @@ class infix(base):
         = __ror__
     
     __add__ = __sub__ = __mul__ = __matmul__ = __rdiv__ = __truediv__ = __floordiv__ = __mod__ = __rpow__ = __and__ = __xor__ = __rshift__ = __lshift__\
-        = __or__
+        = __lt__ = __or__
 
 class postfix(base):
     __radd__ = __rsub__ = __rmul__ = __rmatmul__ = __div__ = __rtruediv__ = __rfloordiv__ = __rmod__ = __rpow__ = __rand__ = __rxor__ = __rlshift__ = __rrshift__\
