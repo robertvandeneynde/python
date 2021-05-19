@@ -4,6 +4,10 @@ import os
 
 import math
 from math import *
+
+import builtins
+pow = builtins.pow
+
 if sys.version_info < (3,6):
     tau = 2 * pi
 
@@ -606,3 +610,10 @@ def unquotecc():
     cc(urllib.parse.unquote(cv()))
     
 ccunquote = unquotecc
+def strgroupn(x:str, n:int=8): 
+   if not len(x) % 8 == 0:
+       raise ValueError(f"{x:!r} len must be divisible by {n}")
+   return [x[i*n:i*n+n] for i in range(len(x)//n)]
+   
+from urllib.parse import unquote as urlunquote
+urldecode = urlunquote

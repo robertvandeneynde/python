@@ -503,12 +503,56 @@ class _BasicTests(unittest.TestCase):
         with self.assertRaises(Exception):
             g = f[1,2]
             g(3)
+
+import operator as _operator
+ops = operators = {
+    '+': _operator.add,
+    '-': _operator.sub,
+    '/': _operator.truediv,
+    '//': _operator.floordiv,
+    '*': _operator.mul,
+    '%': _operator.mod,
+    '@': getattr(_operator, 'matmul', _operator.mul),
+    '&': _operator.and_,
+    '^': _operator.xor,
+    '~': _operator.invert,
+    '|': _operator.or_,
+    '**': _operator.pow,
+    '<<': _operator.lshift,
+    '>>': _operator.rshift,
+    '<': _operator.lt,
+    '<=': _operator.le,
+    '==': _operator.eq,
+    '!=': _operator.ne,
+    '>=': _operator.ge,
+    '>': _operator.gt,
+    'not': _operator.not_,
+    'is': _operator.is_,
+    'is not': _operator.is_not,
+    'is_not': _operator.is_not,
+    'and': _operator.and_,
+    'or': _operator.or_,
+}
     
 from functools import update_wrapper as _update_wrapper
 class base:
-    def __init__(self, function):
+    def __init__(self, function, *, operators:'+-*|@...'):
         self.function = function
+
         _update_wrapper(self, self.function)
+
+        if isinstance(operators, str):
+            if ' ' in operators:
+                operators = operators.split()
+        if operators:
+            # assert is_iterable(operators)
+            operators = set(operators)
+            if not set(operators) <= ops.keys():
+                raise ValueError(str(*tuple(operators)) + str(f'must be in {tuple(ops.keys())}'))
+            
+            self.forbidden = set(ops.keys() - operators)
+        else:
+            self.forbidden = set()
     
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
@@ -537,6 +581,7 @@ class infix(base):
         return infix(lambda x, self=self, other=other: self.function(other, x))
 
     def __or__(self, other):
+        if '|' in self.forbidden: raise ValueError
         return self.function(other)
     
     # __div__ for py2 compability

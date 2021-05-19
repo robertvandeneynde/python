@@ -181,7 +181,8 @@ def unilineverbose(s):
     """
     return '{} ({})'.format(uniline(s), unicatverbose(s))
 
-@multiple_makes_lmap
+# because of extra parameter "height", multiple_makes_lmap is ambiguous
+#@multiple_makes_lmap
 def unicontext(s, height=5):
     name = unicodedata.name(s, '?')
     print('U+' + hex(ord(s))[2:].zfill(4).upper(), s, name)

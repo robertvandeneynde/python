@@ -1,3 +1,4 @@
+#!/bin/bash
 cd /home/robert/python/funcoperators
 
 echo 'please increment the version number in file, vim will be launched'
