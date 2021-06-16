@@ -536,7 +536,7 @@ ops = operators = {
     
 from functools import update_wrapper as _update_wrapper
 class base:
-    def __init__(self, function, *, operators:'+-*|@...'):
+    def __init__(self, function, *, operators:'+-*|@...'=None):
         self.function = function
 
         _update_wrapper(self, self.function)

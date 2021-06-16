@@ -617,3 +617,15 @@ def strgroupn(x:str, n:int=8):
    
 from urllib.parse import unquote as urlunquote
 urldecode = urlunquote
+
+@postfix
+def cyr(x):
+    LM = (list(zip('azertyuiopqsdfghjklmwxcvbn', 
+                   'азертыуиопясдфгхйклмжьцвбн'))
+          + list(zip('sh sch ye yo yu'.split(), 'шщчэёю'))
+          + list(zip('ya'.split(), 'я')))
+    LM2 = [(a.upper(), b.upper()) for a,b in LM]
+    M = dict(LM + LM2) #python before dict order
+    get0 = lambda x: x[0]
+    R = re.compile('[({})]'.format('|'.join(map(re.escape -compose- get0, LM))))
+    return R.sub(lambda x: M.get(x.group(0), x.group(0)), x)
