@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Always wanted to add custom operators ?
 a = (1,2,3) /dot/ (4,5,6)  # a = 32
@@ -192,7 +193,7 @@ TODO: figure out how to have help(infix(function)) prints help about function
 """
 from __future__ import print_function  # for python2
 
-__version__ = '1.1.3'
+__version__ = '1.1.4'
 __author__ = 'Robert Vanden Eynde'
 
 # __all__ = __all__
