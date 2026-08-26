@@ -629,3 +629,5 @@ def cyr(x):
     get0 = lambda x: x[0]
     R = re.compile('[({})]'.format('|'.join(map(re.escape -compose- get0, LM))))
     return R.sub(lambda x: M.get(x.group(0), x.group(0)), x)
+
+from time import sleep
